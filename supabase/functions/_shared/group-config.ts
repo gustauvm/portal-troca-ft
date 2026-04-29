@@ -1,9 +1,13 @@
 export type GroupConfig = {
   label: string;
   whatsappNumber: string;
+  businessUnitIds?: number[];
+  companyIds?: number[];
   companyNameIncludes?: string[];
   companyNumbers?: string[];
   externalCompanyIds?: string[];
+  serviceIncludes?: string[];
+  serviceExcludes?: string[];
   workplaceNameIncludes?: string[];
   workplaceExternalIds?: string[];
   personFilter?: string;
@@ -14,22 +18,25 @@ const DEFAULT_GROUPS: Record<string, GroupConfig> = {
   bombeiros: {
     label: "Dunamis Bombeiros",
     whatsappNumber: "5511919125032",
-    companyNameIncludes: ["DUNAMIS SERVICOS BOMBEIROS"]
+    businessUnitIds: [7558],
+    serviceIncludes: ["BOMBEIRO"]
   },
   servicos: {
     label: "Dunamis Servicos",
     whatsappNumber: "5511940315275",
-    companyNameIncludes: ["DUNAMIS - SERVICOS EMPRESARIAIS TERCEIRIZADOS LTDA"]
+    businessUnitIds: [7558],
+    serviceExcludes: ["BOMBEIRO", "VIGIL", "SEGURAN", "SUPERVISAO", "TECNICA"]
   },
   seguranca: {
     label: "Dunamis Seguranca",
     whatsappNumber: "5511940315275",
-    companyNameIncludes: ["DUNAMIS SEGURANCA E VIGILANCIA LTDA"]
+    businessUnitIds: [7558, 8829],
+    serviceIncludes: ["VIGIL", "SEGURAN", "SUPERVISAO", "TECNICA"]
   },
   rbfacilities: {
     label: "RB Facilities",
     whatsappNumber: "5511940315275",
-    companyNameIncludes: ["RB FACILITIES LTDA"]
+    businessUnitIds: [15578]
   }
 };
 
@@ -43,13 +50,27 @@ function toStringArray(value: unknown): string[] | undefined {
   return result.length ? result : undefined;
 }
 
+function toNumberArray(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const result = value
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item));
+
+  return result.length ? result : undefined;
+}
+
 function mergeConfig(base: GroupConfig, override: Partial<GroupConfig>): GroupConfig {
   return {
     label: String(override.label || base.label),
     whatsappNumber: String(override.whatsappNumber || base.whatsappNumber),
+    businessUnitIds: toNumberArray(override.businessUnitIds) || base.businessUnitIds,
+    companyIds: toNumberArray(override.companyIds) || base.companyIds,
     companyNameIncludes: toStringArray(override.companyNameIncludes) || base.companyNameIncludes,
     companyNumbers: toStringArray(override.companyNumbers) || base.companyNumbers,
     externalCompanyIds: toStringArray(override.externalCompanyIds) || base.externalCompanyIds,
+    serviceIncludes: toStringArray(override.serviceIncludes) || base.serviceIncludes,
+    serviceExcludes: toStringArray(override.serviceExcludes) || base.serviceExcludes,
     workplaceNameIncludes: toStringArray(override.workplaceNameIncludes) || base.workplaceNameIncludes,
     workplaceExternalIds: toStringArray(override.workplaceExternalIds) || base.workplaceExternalIds,
     personFilter: override.personFilter || base.personFilter,

@@ -23,13 +23,19 @@ export async function fetchNextiToken() {
   const baseUrl = getNextiBaseUrl();
   const clientId = requireEnv("NEXTI_CLIENT_ID");
   const clientSecret = requireEnv("NEXTI_CLIENT_SECRET");
-  const url = `${baseUrl}/security/oauth/token?grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}`;
+  const credentials = btoa(`${clientId}:${clientSecret}`);
+  const body = new URLSearchParams({
+    grant_type: "client_credentials"
+  });
 
-  const response = await fetch(url, {
+  const response = await fetch(`${baseUrl}/security/oauth/token`, {
     method: "POST",
     headers: {
-      Accept: "application/json"
-    }
+      Accept: "application/json",
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
   });
 
   const text = await response.text();

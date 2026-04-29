@@ -6,12 +6,15 @@ import { fetchAllPages, fetchNextiToken } from "../_shared/nexti.ts";
 
 type NextiWorkplace = {
   id?: number;
+  businessUnitId?: number;
+  companyId?: number;
   externalId?: string;
   name?: string;
   clientName?: string;
   companyName?: string;
   companyNumber?: string;
   externalCompanyId?: string;
+  service?: string;
   active?: boolean;
   finishDate?: string;
 };
@@ -21,6 +24,8 @@ type NextiPerson = {
   externalId?: string;
   enrolment?: string;
   name?: string;
+  businessUnitId?: number;
+  businessUnitName?: string;
   workplaceId?: number;
   workplaceName?: string;
   externalWorkplaceId?: string;
@@ -50,7 +55,37 @@ function equalsAny(target: unknown, values?: string[]) {
   return values.some((value) => normalizedTarget === normalize(value));
 }
 
+function equalsAnyNumber(target: unknown, values?: number[]) {
+  if (!values || !values.length) return false;
+  const numericTarget = Number(target);
+  return Number.isFinite(numericTarget) && values.includes(numericTarget);
+}
+
 function matchesWorkplace(workplace: NextiWorkplace, config: GroupConfig) {
+  if (config.businessUnitIds?.length && equalsAnyNumber(workplace.businessUnitId, config.businessUnitIds)) {
+    if (config.serviceIncludes?.length && !includesAny(workplace.service, config.serviceIncludes)) {
+      return false;
+    }
+
+    if (config.serviceExcludes?.length && includesAny(workplace.service, config.serviceExcludes)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  if (config.companyIds?.length && equalsAnyNumber(workplace.companyId, config.companyIds)) {
+    if (config.serviceIncludes?.length && !includesAny(workplace.service, config.serviceIncludes)) {
+      return false;
+    }
+
+    if (config.serviceExcludes?.length && includesAny(workplace.service, config.serviceExcludes)) {
+      return false;
+    }
+
+    return true;
+  }
+
   if (config.workplaceExternalIds?.length && equalsAny(workplace.externalId, config.workplaceExternalIds)) {
     return true;
   }
@@ -85,6 +120,14 @@ function matchesPerson(
   }
 
   if (person.externalWorkplaceId && allowedWorkplaceExternalIds.has(normalize(person.externalWorkplaceId))) {
+    return true;
+  }
+
+  if (config.businessUnitIds?.length && equalsAnyNumber(person.businessUnitId, config.businessUnitIds)) {
+    return true;
+  }
+
+  if (config.companyIds?.length && equalsAnyNumber(person.companyId, config.companyIds)) {
     return true;
   }
 
