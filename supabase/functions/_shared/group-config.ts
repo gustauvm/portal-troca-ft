@@ -18,8 +18,7 @@ const DEFAULT_GROUPS: Record<string, GroupConfig> = {
   bombeiros: {
     label: "Dunamis Bombeiros",
     whatsappNumber: "5511919125032",
-    businessUnitIds: [7558],
-    serviceIncludes: ["BOMBEIRO"]
+    businessUnitIds: [7558]
   },
   servicos: {
     label: "Dunamis Servicos",

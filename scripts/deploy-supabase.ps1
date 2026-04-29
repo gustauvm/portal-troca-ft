@@ -165,7 +165,7 @@ function Wait-ForProjectReady {
 }
 
 function Get-DefaultGroupConfigJson {
-  return '{"bombeiros":{"businessUnitIds":[7558],"serviceIncludes":["BOMBEIRO"]},"servicos":{"businessUnitIds":[7558],"serviceExcludes":["BOMBEIRO","VIGIL","SEGURAN","SUPERVISAO","TECNICA"]},"seguranca":{"businessUnitIds":[7558,8829],"serviceIncludes":["VIGIL","SEGURAN","SUPERVISAO","TECNICA"]},"rbfacilities":{"businessUnitIds":[15578]}}'
+  return '{"bombeiros":{"businessUnitIds":[7558]},"servicos":{"businessUnitIds":[7558],"serviceExcludes":["BOMBEIRO","VIGIL","SEGURAN","SUPERVISAO","TECNICA"]},"seguranca":{"businessUnitIds":[7558,8829],"serviceIncludes":["VIGIL","SEGURAN","SUPERVISAO","TECNICA"]},"rbfacilities":{"businessUnitIds":[15578]}}'
 }
 
 $null = Get-ProjectList

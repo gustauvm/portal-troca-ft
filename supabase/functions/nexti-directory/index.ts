@@ -61,6 +61,16 @@ function equalsAnyNumber(target: unknown, values?: number[]) {
   return Number.isFinite(numericTarget) && values.includes(numericTarget);
 }
 
+function requiresWorkplaceScope(config: GroupConfig) {
+  return Boolean(
+    config.serviceIncludes?.length ||
+    config.serviceExcludes?.length ||
+    config.workplaceNameIncludes?.length ||
+    config.workplaceExternalIds?.length ||
+    config.companyNumbers?.length
+  );
+}
+
 function matchesWorkplace(workplace: NextiWorkplace, config: GroupConfig) {
   if (config.businessUnitIds?.length && equalsAnyNumber(workplace.businessUnitId, config.businessUnitIds)) {
     if (config.serviceIncludes?.length && !includesAny(workplace.service, config.serviceIncludes)) {
@@ -115,31 +125,46 @@ function matchesPerson(
   allowedWorkplaceIds: Set<number>,
   allowedWorkplaceExternalIds: Set<string>
 ) {
-  if (person.workplaceId && allowedWorkplaceIds.has(person.workplaceId)) {
+  const useWorkplaceScope =
+    requiresWorkplaceScope(config) &&
+    (allowedWorkplaceIds.size > 0 || allowedWorkplaceExternalIds.size > 0);
+  const matchesConfigScope = (() => {
+    if (config.businessUnitIds?.length && !equalsAnyNumber(person.businessUnitId, config.businessUnitIds)) {
+      return false;
+    }
+
+    if (config.companyIds?.length && !equalsAnyNumber(person.companyId, config.companyIds)) {
+      return false;
+    }
+
+    if (config.externalCompanyIds?.length && !equalsAny(person.externalCompanyId, config.externalCompanyIds)) {
+      return false;
+    }
+
+    if (config.companyNameIncludes?.length && !includesAny(person.companyName, config.companyNameIncludes)) {
+      return false;
+    }
+
     return true;
+  })();
+
+  if (!matchesConfigScope) {
+    return false;
   }
 
-  if (person.externalWorkplaceId && allowedWorkplaceExternalIds.has(normalize(person.externalWorkplaceId))) {
-    return true;
+  if (useWorkplaceScope) {
+    if (person.workplaceId && allowedWorkplaceIds.has(person.workplaceId)) {
+      return true;
+    }
+
+    if (person.externalWorkplaceId && allowedWorkplaceExternalIds.has(normalize(person.externalWorkplaceId))) {
+      return true;
+    }
+
+    return false;
   }
 
-  if (config.businessUnitIds?.length && equalsAnyNumber(person.businessUnitId, config.businessUnitIds)) {
-    return true;
-  }
-
-  if (config.companyIds?.length && equalsAnyNumber(person.companyId, config.companyIds)) {
-    return true;
-  }
-
-  if (config.externalCompanyIds?.length && equalsAny(person.externalCompanyId, config.externalCompanyIds)) {
-    return true;
-  }
-
-  if (config.companyNameIncludes?.length && includesAny(person.companyName, config.companyNameIncludes)) {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 function mapWorkplace(workplace: NextiWorkplace) {
@@ -212,6 +237,8 @@ serve(async (request) => {
       200
     );
 
+    const allMappedWorkplaces = workplaces.map(mapWorkplace);
+
     const filteredWorkplaces = workplaces
       .filter((workplace) => matchesWorkplace(workplace, config))
       .map(mapWorkplace)
@@ -239,23 +266,56 @@ serve(async (request) => {
     );
 
     const filteredPersons = persons
+      .filter((person) => Number(person.personSituationId || 0) === 1)
       .filter((person) => matchesPerson(person, config, allowedWorkplaceIds, allowedWorkplaceExternalIds))
       .map(mapPerson)
+      .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
+
+    const activeWorkplaceIds = new Set(
+      filteredPersons
+        .map((person) => person.workplaceId)
+        .filter((value): value is number => typeof value === "number" && value > 0)
+    );
+
+    const activeWorkplaceExternalIds = new Set(
+      filteredPersons
+        .map((person) => normalize(person.workplaceExternalId))
+        .filter(Boolean)
+    );
+
+    const visibleWorkplaces = allMappedWorkplaces
+      .filter((workplace) => {
+        if (activeWorkplaceIds.size === 0 && activeWorkplaceExternalIds.size === 0) {
+          return filteredWorkplaces.some(
+            (filteredWorkplace) =>
+              filteredWorkplace.id === workplace.id ||
+              normalize(filteredWorkplace.externalId) === normalize(workplace.externalId)
+          );
+        }
+
+        return (
+          (typeof workplace.id === "number" && activeWorkplaceIds.has(workplace.id)) ||
+          activeWorkplaceExternalIds.has(normalize(workplace.externalId))
+        );
+      })
       .sort((left, right) => left.name.localeCompare(right.name, "pt-BR"));
 
     return jsonResponse({
       group,
       loadedAt: new Date().toISOString(),
       metadata: {
-        workplaceCount: filteredWorkplaces.length,
+        workplaceCount: visibleWorkplaces.length,
         personCount: filteredPersons.length,
         filtersApplied: {
+          businessUnitIds: config.businessUnitIds || [],
           companyNameIncludes: config.companyNameIncludes || [],
           externalCompanyIds: config.externalCompanyIds || [],
+          serviceIncludes: config.serviceIncludes || [],
+          serviceExcludes: config.serviceExcludes || [],
           workplaceExternalIds: config.workplaceExternalIds || []
         }
       },
-      workplaces: filteredWorkplaces,
+      workplaces: visibleWorkplaces,
       persons: filteredPersons
     });
   } catch (error) {
