@@ -44,6 +44,24 @@ function Get-NativeOutput {
   return $output
 }
 
+function Test-NativeCommand {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath,
+    [string[]]$Arguments = @()
+  )
+
+  $stdoutPath = [System.IO.Path]::GetTempFileName()
+  $stderrPath = [System.IO.Path]::GetTempFileName()
+
+  try {
+    $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -NoNewWindow -PassThru -Wait
+    return $process.ExitCode -eq 0
+  } finally {
+    Remove-Item -Force $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
+  }
+}
+
 if (-not (Test-Path $ghExe)) {
   throw "gh nao encontrado. Rode scripts/install-tools.ps1 primeiro."
 }
@@ -56,11 +74,7 @@ try {
 
   if (-not $SkipCommit) {
     Invoke-Native -FilePath "git" -Arguments @("add", ".")
-    $hasHead = $true
-    & git rev-parse --verify HEAD *> $null
-    if ($LASTEXITCODE -ne 0) {
-      $hasHead = $false
-    }
+    $hasHead = Test-NativeCommand -FilePath "git" -Arguments @("rev-parse", "--verify", "HEAD")
 
     if (-not $hasHead) {
       Invoke-Native -FilePath "git" -Arguments @("commit", "-m", "Initial commit")
