@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Trocas - Selecione seu Grupo | Dunamis</title>
+    <style>
+        :root {
+            --dunamis-primary: #0a192f;
+            --dunamis-accent: #172a45;
+            --bg: #e0e4e8;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 550px;
+            background: white;
+            padding: 40px 25px;
+            border-radius: 15px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.15);
+            border-top: 10px solid var(--dunamis-primary);
+            text-align: center;
+        }
+
+        header {
+            margin-bottom: 30px;
+        }
+
+        .logo-img {
+            max-width: 180px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: var(--dunamis-primary);
+            font-size: 22px;
+            margin: 20px 0;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 35px;
+            line-height: 1.5;
+        }
+
+        .grupos-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .grupo-btn {
+            padding: 20px 15px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f8f9fa;
+            color: var(--dunamis-primary);
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .grupo-btn:hover {
+            background: var(--dunamis-primary);
+            color: white;
+            border-color: var(--dunamis-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 15px rgba(10,25,47,0.2);
+        }
+
+        .grupo-btn img {
+            height: 80px;
+            width: auto;
+            max-width: 100%;
+            display: block;
+            margin: 0 auto 15px auto;
+        }
+
+        .footer-text {
+            font-size: 12px;
+            color: #999;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <h1>Portal de Trocas de Folgas</h1>
+    <p class="subtitle">ESCOLHA O GRUPO QUE VOCÊ TRABALHA</p>
+
+    <div class="grupos-grid">
+        <button class="grupo-btn" onclick="selecionarGrupo('bombeiros')">
+            <img src="./images/logo-dunamis-bombeiros.png" alt="Bombeiros">Dunamis<br>Bombeiros
+        </button>
+        <button class="grupo-btn" onclick="selecionarGrupo('servicos')">
+            <img src="./images/logo-dunamis-servicos.png" alt="Serviços">Dunamis<br>Serviços
+        </button>
+        <button class="grupo-btn" onclick="selecionarGrupo('seguranca')">
+            <img src="./images/logo-dunamis-seguranca.png" alt="Segurança">Dunamis<br>Segurança
+        </button>
+        <button class="grupo-btn" onclick="selecionarGrupo('rbfacilities')">
+            <img src="./images/logo-rb.png" alt="RB Facilities">RB<br>Facilities
+        </button>
+    </div>
+
+    <p class="footer-text">© 2026 Grupo Dunamis. Todos os direitos reservados.</p>
+</div>
+
+<script>
+    function selecionarGrupo(grupo) {
+        localStorage.setItem('grupoSelecionado', grupo);
+        window.location.href = './index.html';
+    }
+</script>
+
+</body>
+</html>

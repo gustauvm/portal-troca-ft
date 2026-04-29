@@ -1,0 +1,11 @@
+dist/
+.tools/
+.temp.supabase-secrets.env
+.DS_Store
+Thumbs.db
+.env
+.env.*
+node_modules/
+.vercel/
+.idea/
+.vscode/

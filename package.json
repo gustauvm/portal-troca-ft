@@ -1,0 +1,9 @@
+{
+  "name": "troca-de-folga-portal",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Portal estatico de solicitacao de trocas de folga integrado ao Supabase e leitura da Nexti.",
+  "scripts": {
+    "build:pages": "node scripts/build-pages.mjs"
+  }
+}

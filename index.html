@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Trocas | Dunamis Bombeiros</title>
+    <style>
+        /* VISUAL ESTRITAMENTE IDÊNTICO À V1 */
+        :root { 
+            --dunamis-red: #d32f2f; 
+            --dunamis-blue: #1a237e;
+            --success: #2e7d32; 
+            --warning: #f57f17;
+            --error: #b71c1c;
+            --whatsapp: #25d366;
+            --bg: #f4f7f6; 
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: var(--bg); display: flex; justify-content: center; 
+            align-items: center; min-height: 100vh; margin: 0; padding: 10px;
+        }
+
+        .container { 
+            width: 100%; max-width: 550px; background: white; padding: 25px; 
+            border-radius: 15px; box-shadow: 0 12px 30px rgba(0,0,0,0.1); 
+            border-top: 10px solid var(--dunamis-red);
+        }
+        
+        header { text-align: center; margin-bottom: 20px; }
+        .logo-img { max-width: 180px; height: auto; margin-bottom: 5px; }
+
+        .progress-bar { 
+            display: flex; justify-content: space-between; margin-bottom: 30px; 
+            border-bottom: 2px solid #eee; padding-bottom: 12px;
+        }
+        .progress-bar span { font-size: 10px; color: #aaa; font-weight: bold; text-transform: uppercase; flex: 1; text-align: center; }
+        .progress-bar .active { color: var(--dunamis-red); border-bottom: 3px solid var(--dunamis-red); margin-bottom: -15px; }
+
+        .step { display: none; }
+        .step.active { display: block; animation: fadeIn 0.4s ease; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: var(--dunamis-blue); font-size: 12px; text-transform: uppercase; }
+        
+        input, textarea, select { 
+            width: 100%; padding: 15px; border: 2px solid #eee; border-radius: 10px; 
+            box-sizing: border-box; font-size: 16px; background: #fafafa; font-family: inherit;
+        }
+
+        .dual-date-container { display: flex; gap: 10px; align-items: stretch; }
+        .manual-date { flex: 3; text-align: center; letter-spacing: 1px; }
+        
+        .picker-wrapper { 
+            flex: 1; position: relative; background: #fff; border: 2px solid #333; 
+            border-radius: 10px; display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; overflow: hidden; 
+        }
+        
+        .picker-input { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            opacity: 0; cursor: pointer; z-index: 10; 
+        }
+        .calendar-icon-btn { font-size: 22px; z-index: 1; pointer-events: none; }
+
+        textarea { resize: vertical; min-height: 80px; }
+        input:focus, textarea:focus, select:focus { border-color: var(--dunamis-blue); outline: none; background: #fff; }
+        
+        .nome-encontrado { color: var(--success) !important; font-weight: bold; background-color: #f1f8e9 !important; border: 2px solid var(--success) !important; }
+        .status-afastado { color: var(--error) !important; font-weight: bold; background-color: #ffebee !important; border: 2px solid var(--error) !important; }
+        
+        .btn-group { display: flex; gap: 12px; margin-top: 25px; }
+        button { flex: 1; padding: 18px; border: none; border-radius: 10px; font-size: 14px; font-weight: bold; cursor: pointer; text-transform: uppercase; }
+        .btn-next { background: var(--dunamis-red); color: white; }
+        .btn-prev { background: #cfd8dc; color: #455a64; }
+        .btn-finish { background: var(--dunamis-blue); color: white; }
+        
+        .btn-whatsapp { 
+            background: var(--whatsapp); color: white; width: 100%; margin-top: 15px; 
+            display: none; align-items: center; justify-content: center; gap: 10px;
+        }
+        .btn-whatsapp:hover { background: #1ebc57; }
+
+        .msg-sucesso-container {
+            text-align: center; margin-top: 20px; display: none; 
+            background-color: #e8f5e9; border: 1px solid #c8e6c9; 
+            padding: 15px; border-radius: 10px;
+        }
+        .msg-sucesso-titulo { color: var(--success); font-weight: bold; font-size: 18px; display: block; margin-bottom: 5px; }
+        .msg-sucesso-texto { color: #2e7d32; font-size: 14px; }
+
+        .alerta-erro { background: #ffebee; border-left: 5px solid var(--dunamis-red); color: #b71c1c; padding: 12px; margin-top: 10px; font-size: 12px; border-radius: 5px; display: none; }
+        .alerta-aviso { background: #fff3e0; border-left: 5px solid var(--warning); color: #e65100; padding: 12px; margin-top: 10px; font-size: 12px; border-radius: 5px; display: none; }
+        
+        .resumo-box { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 12px; padding: 25px; line-height: 1.8; font-size: 14px; }
+        
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); z-index: 1000;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+        .loader { border: 5px solid #f3f3f3; border-top: 5px solid var(--dunamis-red); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="loader"></div>
+    <div id="loading-message" style="color: #666; font-weight: bold;">Carregando Base...</div>
+</div>
+
+<div class="container">
+    <div style="margin-bottom: 15px;">
+        <button type="button" class="btn-prev" style="width: auto; padding: 8px 15px; font-size: 12px;" onclick="window.location.href='./gateway.html'">⬅ Voltar para seleção de empresa</button>
+    </div>
+    <header>
+        <img src="./images/logo-dunamis-bombeiros.png" alt="Grupo Dunamis" class="logo-img">
+    </header>
+    <div id="grupo-selecionado-texto" style="text-align: center; font-weight: bold; color: var(--dunamis-blue); margin-top: -15px; margin-bottom: 20px; font-size: 14px;"></div>
+
+    <div class="progress-bar">
+        <span id="p1" class="active">Solicitante</span>
+        <span id="p2">Substituto</span>
+        <span id="p3">Concluir</span>
+    </div>
+
+    <div id="step1" class="step active">
+        <div class="form-group">
+            <label>Seu RE (Matrícula)</label>
+            <input type="number" id="re_sol" placeholder="Ex: 0000" oninput="buscar('sol')">
+            <div id="e_status_sol" class="alerta-erro"></div>
+        </div>
+        <div class="form-group">
+            <label>Seu Nome</label>
+            <input type="text" id="nome_sol" readonly placeholder="Aguardando RE...">
+        </div>
+        
+        <div class="form-group">
+            <label>Unidade da Troca</label>
+            <select id="unidade_troca">
+                <option value="">Selecione a unidade...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>DATA QUE IREI TRABALHAR</label>
+            <div class="dual-date-container">
+                <input type="tel" id="data_folga_txt" class="manual-date" placeholder="DD/MM/AAAA" maxlength="10" oninput="syncManual('data_folga')">
+                <div class="picker-wrapper" onclick="abrirCalendario('data_folga')">
+                    <span class="calendar-icon-btn">📅</span>
+                    <input type="date" id="data_folga" class="picker-input" oninput="syncPicker('data_folga')" onchange="syncPicker('data_folga')">
+                </div>
+            </div>
+            <div id="e_folha_fechada_folga" class="alerta-erro"></div>
+            <div id="e_turma_folga" class="alerta-erro"></div>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn-prev" onclick="window.location.href='./gateway.html'">Voltar</button>
+            <button type="button" class="btn-next" onclick="nextStep(2)">Próximo Passo</button>
+        </div>
+    </div>
+
+    <div id="step2" class="step">
+        <div class="form-group">
+            <label>RE do Substituto</label>
+            <input type="number" id="re_sub" placeholder="Ex: 0000" oninput="buscar('sub')">
+            <div id="e_re" class="alerta-erro"></div>
+            <div id="e_status_sub" class="alerta-erro"></div>
+        </div>
+        <div class="form-group">
+            <label>Nome do Substituto</label>
+            <input type="text" id="nome_sub" readonly placeholder="Aguardando RE...">
+        </div>
+        
+        <div class="form-group">
+            <label>DATA DE PAGAMENTO DA TROCA (DIA QUE IREI FOLGAR)</label>
+            <div class="dual-date-container">
+                <input type="tel" id="data_pagamento_txt" class="manual-date" placeholder="DD/MM/AAAA" maxlength="10" oninput="syncManual('data_pagamento')">
+                <div class="picker-wrapper" onclick="abrirCalendario('data_pagamento')">
+                    <span class="calendar-icon-btn">📅</span>
+                    <input type="date" id="data_pagamento" class="picker-input" oninput="syncPicker('data_pagamento')" onchange="syncPicker('data_pagamento')">
+                </div>
+            </div>
+            <div id="e_folha_fechada_pagamento" class="alerta-erro"></div>
+            <div id="e_turma_pagamento" class="alerta-erro"></div>
+            <div id="e_escala" class="alerta-erro"></div> 
+            <div id="e_folha" class="alerta-aviso"></div>  
+        </div>
+        
+        <div class="form-group">
+            <label>Motivo da Troca</label>
+            <textarea id="motivo_troca" placeholder="Descreva brevemente o motivo da solicitação..."></textarea>
+        </div>
+        
+        <div class="btn-group">
+            <button type="button" class="btn-prev" onclick="nextStep(1)">Voltar</button>
+            <button type="button" class="btn-next" onclick="nextStep(3)">Revisar</button>
+        </div>
+    </div>
+
+    <div id="step3" class="step">
+        <div class="resumo-box" id="resumo_txt"></div>
+        
+        <div class="btn-group" id="group_confirmacao">
+            <button type="button" class="btn-prev" onclick="nextStep(2)">Corrigir</button>
+            <button type="button" class="btn-finish" id="btn_confirmar" onclick="finalizar()">Confirmar Envio</button>
+        </div>
+
+        <div id="msg_sucesso" class="msg-sucesso-container">
+            <span class="msg-sucesso-titulo">✅ Solicitação Registrada!</span>
+            <span class="msg-sucesso-texto">A solicitação foi salva para aprovação. Agora, clique abaixo para enviar o comprovante no WhatsApp.</span>
+        </div>
+
+        <button type="button" class="btn-whatsapp" id="btn_whatsapp_final" onclick="enviarWhatsapp()">
+            📲 ENVIAR O COMPROVANTE
+        </button>
+    </div>
+</div>
+
+<script src="./js/app-config.js" defer></script>
+<script src="./js/portal-app.js" defer></script>
+</body>
+</html>
