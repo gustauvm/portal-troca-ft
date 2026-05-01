@@ -8,6 +8,8 @@ export type GroupConfig = {
   externalCompanyIds?: string[];
   serviceIncludes?: string[];
   serviceExcludes?: string[];
+  careerIds?: number[];
+  careerNameIncludes?: string[];
   workplaceNameIncludes?: string[];
   workplaceExternalIds?: string[];
   personFilter?: string;
@@ -18,24 +20,22 @@ const DEFAULT_GROUPS: Record<string, GroupConfig> = {
   bombeiros: {
     label: "Dunamis Bombeiros",
     whatsappNumber: "5511919125032",
-    businessUnitIds: [7558]
+    companyIds: [11933]
   },
   servicos: {
     label: "Dunamis Servicos",
     whatsappNumber: "5511940315275",
-    businessUnitIds: [7558],
-    serviceExcludes: ["BOMBEIRO", "VIGIL", "SEGURAN", "SUPERVISAO", "TECNICA"]
+    companyIds: [6098]
   },
   seguranca: {
     label: "Dunamis Seguranca",
     whatsappNumber: "5511940315275",
-    businessUnitIds: [7558, 8829],
-    serviceIncludes: ["VIGIL", "SEGURAN", "SUPERVISAO", "TECNICA"]
+    companyIds: [6097]
   },
   rbfacilities: {
     label: "RB Facilities",
     whatsappNumber: "5511940315275",
-    businessUnitIds: [15578]
+    companyIds: [8028]
   }
 };
 
@@ -70,6 +70,8 @@ function mergeConfig(base: GroupConfig, override: Partial<GroupConfig>): GroupCo
     externalCompanyIds: toStringArray(override.externalCompanyIds) || base.externalCompanyIds,
     serviceIncludes: toStringArray(override.serviceIncludes) || base.serviceIncludes,
     serviceExcludes: toStringArray(override.serviceExcludes) || base.serviceExcludes,
+    careerIds: toNumberArray(override.careerIds) || base.careerIds,
+    careerNameIncludes: toStringArray(override.careerNameIncludes) || base.careerNameIncludes,
     workplaceNameIncludes: toStringArray(override.workplaceNameIncludes) || base.workplaceNameIncludes,
     workplaceExternalIds: toStringArray(override.workplaceExternalIds) || base.workplaceExternalIds,
     personFilter: override.personFilter || base.personFilter,

@@ -7,5 +7,13 @@ Thumbs.db
 .env.*
 node_modules/
 .vercel/
+.next/
+out/
+.turbo/
+.next-scaffold/
+tsconfig.tsbuildinfo
 .idea/
 .vscode/
+
+.vercel
+.env*.local

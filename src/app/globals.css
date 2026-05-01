@@ -1,0 +1,81 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  --surface-100: #f3f6f8;
+  --surface-150: #ebf1f4;
+  --surface-200: #dfe8ee;
+  --ink-950: #071018;
+  --ink-900: #0b1b28;
+  --ink-800: #1d3443;
+  --ink-700: #365062;
+  --ink-600: #577287;
+  --ink-500: #7994a8;
+  --ink-400: #97acbb;
+  --brand-700: #0e5076;
+  --brand-600: #15658f;
+  --brand-500: #2d81aa;
+  --brand-400: #57a3ca;
+  --brand-200: #cce8f4;
+  --brand-100: #e5f4fb;
+  --accent-500: #d39a33;
+  --accent-100: #fef2d9;
+  --ring: color-mix(in oklab, var(--brand-400) 60%, white);
+  --font-sans: "Manrope", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Manrope", system-ui, sans-serif;
+}
+
+@theme inline {
+  --color-background: var(--surface-100);
+  --color-foreground: var(--ink-900);
+  --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(87, 163, 202, 0.18), transparent 30%),
+    radial-gradient(circle at top right, rgba(211, 154, 51, 0.12), transparent 24%),
+    linear-gradient(180deg, #f7fafb 0%, #eff4f7 100%);
+  color: var(--ink-900);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display), sans-serif;
+}
+
+::selection {
+  background: rgba(45, 129, 170, 0.18);
+}
+
+.page-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.page-shell::before {
+  content: "";
+  position: fixed;
+  inset: auto auto 8% -5%;
+  z-index: -1;
+  width: min(42vw, 24rem);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(45, 129, 170, 0.16), transparent 70%);
+  filter: blur(12px);
+}
+
+.page-shell::after {
+  content: "";
+  position: fixed;
+  inset: 10% -4% auto auto;
+  z-index: -1;
+  width: min(34vw, 20rem);
+  aspect-ratio: 1;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(211, 154, 51, 0.14), transparent 70%);
+  filter: blur(10px);
+}
