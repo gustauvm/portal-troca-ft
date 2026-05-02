@@ -1,69 +1,61 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const root = process.cwd();
 const dist = resolve(root, "dist");
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://portal-troca-ft.vercel.app";
 
-const requiredEnv = ["SUPABASE_PROJECT_URL", "SUPABASE_ANON_KEY"];
-const missing = requiredEnv.filter((name) => !process.env[name]);
-const allowPlaceholder = process.env.ALLOW_PLACEHOLDER_CONFIG === "1";
-
-if (missing.length && !allowPlaceholder) {
-  console.error(`Missing required env vars for Pages build: ${missing.join(", ")}`);
-  process.exit(1);
-}
+const redirectHtml = `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=${appUrl}" />
+    <link rel="canonical" href="${appUrl}" />
+    <title>Portal de Permutas e FT</title>
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f2efe8;
+        color: #0f2533;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+      }
+      main {
+        width: min(92vw, 520px);
+        padding: 32px;
+        border-radius: 28px;
+        background: #fffaf0;
+        box-shadow: 0 24px 70px rgb(15 37 51 / 16%);
+        text-align: center;
+      }
+      a {
+        color: #0f5f7c;
+        font-weight: 700;
+      }
+    </style>
+    <script>
+      window.location.replace(${JSON.stringify(appUrl)});
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Portal migrado para o Vercel</h1>
+      <p>Se o redirecionamento nao acontecer automaticamente, acesse:</p>
+      <p><a href="${appUrl}">${appUrl}</a></p>
+    </main>
+  </body>
+</html>
+`;
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
-const filesToCopy = ["index.html", "gateway.html"];
-for (const file of filesToCopy) {
-  cpSync(resolve(root, file), resolve(dist, file));
+for (const file of ["index.html", "gateway.html", "404.html"]) {
+  writeFileSync(join(dist, file), redirectHtml, "utf8");
 }
 
-const directoriesToCopy = ["images", "js"];
-for (const dir of directoriesToCopy) {
-  if (existsSync(resolve(root, dir))) {
-    cpSync(resolve(root, dir), resolve(dist, dir), { recursive: true });
-  }
-}
-
-const projectUrl = process.env.SUPABASE_PROJECT_URL || "";
-const anonKey = process.env.SUPABASE_ANON_KEY || "";
-const functionsBaseUrl =
-  process.env.SUPABASE_FUNCTIONS_BASE_URL ||
-  (projectUrl ? `${projectUrl.replace(/\/$/, "")}/functions/v1` : "");
-
-const appConfig = `window.APP_CONFIG = {
-  dataProvider: "supabase",
-  supabase: {
-    projectUrl: ${JSON.stringify(projectUrl)},
-    anonKey: ${JSON.stringify(anonKey)},
-    functionsBaseUrl: ${JSON.stringify(functionsBaseUrl)}
-  },
-  groups: {
-    bombeiros: {
-      label: "Dunamis Bombeiros",
-      whatsappNumber: "5511919125032"
-    },
-    servicos: {
-      label: "Dunamis Servicos",
-      whatsappNumber: "5511940315275"
-    },
-    seguranca: {
-      label: "Dunamis Seguranca",
-      whatsappNumber: "5511940315275"
-    },
-    rbfacilities: {
-      label: "RB Facilities",
-      whatsappNumber: "5511940315275"
-    }
-  }
-};
-`;
-
-writeFileSync(join(dist, "js", "app-config.js"), appConfig, "utf8");
 writeFileSync(join(dist, ".nojekyll"), "", "utf8");
-
-const readmeNote = `Build generated at ${new Date().toISOString()}\n`;
-writeFileSync(join(dist, "build-info.txt"), readmeNote, "utf8");
+writeFileSync(join(dist, "build-info.txt"), `Redirect generated at ${new Date().toISOString()}\n`, "utf8");

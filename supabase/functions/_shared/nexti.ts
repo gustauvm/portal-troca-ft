@@ -15,6 +15,14 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function assertReadOnlyMethod(method?: string) {
+  const normalized = String(method || "GET").trim().toUpperCase();
+  if (!["GET", "HEAD"].includes(normalized)) {
+    throw new Error(`Operacao bloqueada: o portal esta configurado em modo somente leitura na Nexti (${normalized}).`);
+  }
+  return normalized;
+}
+
 export function getNextiBaseUrl() {
   return (Deno.env.get("NEXTI_API_BASE_URL") || DEFAULT_NEXTI_BASE_URL).replace(/\/$/, "");
 }
@@ -49,8 +57,10 @@ export async function fetchNextiToken() {
 }
 
 export async function nextiRequest<T>(path: string, token: string, init?: RequestInit): Promise<T> {
+  const method = assertReadOnlyMethod(init?.method);
   const response = await fetch(`${getNextiBaseUrl()}${path}`, {
     ...init,
+    method,
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${token}`,

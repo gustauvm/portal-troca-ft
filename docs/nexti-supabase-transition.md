@@ -13,11 +13,24 @@ O fluxo passa a ser:
 3. O navegador chama `Supabase Edge Functions`.
 4. As functions autenticam na Nexti com `OAuth2 client_credentials`.
 5. A function `nexti-directory` devolve colaboradores e postos reais.
-6. A function `troca-request` grava a solicitacao no Supabase e prepara um modelo de conciliacao.
+6. A function `troca-request` grava a solicitacao no Supabase e prepara apenas um modelo interno de conciliacao.
 7. A function `troca-review` aprova/rejeita a solicitacao internamente.
 8. A function `troca-queue` lista a fila de solicitacoes para a mesa operacional.
 9. A function `troca-reconcile` consulta a Nexti em modo leitura e marca a solicitacao como lancada quando encontrar o registro manual.
 10. A function `troca-history` lista o historico do colaborador por folha.
+
+## Regra inviolavel
+
+O portal nao pode criar, alterar ou excluir registros operacionais na Nexti.
+
+Em outras palavras:
+
+- o portal pode autenticar na Nexti
+- o portal pode consultar a Nexti
+- o portal pode reconciliar por leitura
+- o portal nao pode lancar `schedule transfer`
+- o portal nao pode lancar `replacement`
+- o portal nao pode fazer `POST`, `PUT` ou `DELETE` de dados operacionais na Nexti
 
 ## O que ja ficou pronto
 

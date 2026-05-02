@@ -1,9 +1,42 @@
 {
-  "name": "troca-de-folga-portal",
+  "name": "portal-troca-ft",
+  "version": "2.0.0",
   "private": true,
-  "version": "1.0.0",
-  "description": "Portal estatico de solicitacao de trocas de folga integrado ao Supabase e leitura da Nexti.",
+  "description": "Portal moderno de permutas e folgas trabalhadas integrado ao Supabase e a Nexti em modo leitura.",
   "scripts": {
-    "build:pages": "node scripts/build-pages.mjs"
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "build:pages": "node scripts/build-pages.mjs",
+    "build:legacy-pages": "node scripts/build-pages.mjs",
+    "sync:nexti-directory": "node scripts/sync-nexti-directory.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.105.1",
+    "@tanstack/react-query": "^5.100.6",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.552.0",
+    "motion": "^12.38.0",
+    "next": "16.2.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.4.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.2.4",
+    "@types/node": "^24.10.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "16.2.4",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^5.9.3"
   }
 }

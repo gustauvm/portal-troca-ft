@@ -1,0 +1,8 @@
+.env
+.env.*
+.next
+.git
+node_modules
+dist
+out
+.tools
