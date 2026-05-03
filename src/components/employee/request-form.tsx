@@ -45,14 +45,12 @@ type ResolveColleagueResponse = {
 const requestTypeConfig = {
   swap: {
     title: "Permuta (Troca de Folga)",
-    description:
-      "Informe o RE do colega. O portal confere nome, unidade, cargo, escala, folha e duplicidade antes de registrar.",
+    description: "",
     success: "Permuta registrada. Ela já entrou na fila operacional.",
   },
   ft: {
     title: "FT",
-    description:
-      "Informe unidade, data da folga trabalhada e horário. O motivo da FT será preenchido somente pela operação.",
+    description: "",
     success: "Solicitação de FT registrada. Ela já entrou na fila operacional.",
   },
 };
@@ -111,7 +109,7 @@ export function EmployeeRequestForm({
   }, [deferredColleagueRe, requestType]);
 
   return (
-    <div className="grid gap-5 pb-24 sm:pb-0">
+    <div className="grid gap-5">
       <div className="grid grid-cols-2 gap-2 rounded-full bg-white/72 p-1 shadow-[0_14px_32px_rgba(10,20,30,0.08)]">
         <Button
           asChild
@@ -134,7 +132,7 @@ export function EmployeeRequestForm({
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">{config.title}</CardTitle>
-          <CardDescription>{config.description}</CardDescription>
+          {config.description && <CardDescription>{config.description}</CardDescription>}
         </CardHeader>
         <CardContent className="grid gap-6">
           <div className="grid gap-3 rounded-[24px] bg-[color:var(--surface-150)] p-4">

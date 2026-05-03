@@ -470,13 +470,26 @@ export async function listValidShifts() {
     .select("*")
     .eq("is_active", true)
     .eq("is_pre_assigned", false)
+    .order("nexti_shift_id")
     .order("name");
 
   if (error) {
     throw new Error("Não foi possível consultar horários disponíveis.");
   }
 
-  return ((data || []) as ShiftRow[]).map(mapShift);
+  const allShifts = ((data || []) as ShiftRow[]).map(mapShift);
+  
+  // Deduplicate by nextiShiftId, keeping first occurrence
+  const seen = new Set<number>();
+  const deduped = allShifts.filter((shift) => {
+    if (seen.has(shift.nextiShiftId)) {
+      return false;
+    }
+    seen.add(shift.nextiShiftId);
+    return true;
+  });
+
+  return deduped;
 }
 
 export async function getShiftById(shiftDirectoryId: string) {

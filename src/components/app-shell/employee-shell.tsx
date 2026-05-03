@@ -35,43 +35,30 @@ export function EmployeeShell({
           </div>
         </header>
 
-        <section className="flex-1">{children}</section>
-
-        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-md grid-cols-3 gap-1 rounded-full border border-white/70 bg-white/92 p-1 shadow-[0_18px_50px_rgba(10,20,30,0.16)] backdrop-blur-xl sm:hidden">
-          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/solicitar/permuta">
-            <Shuffle className="h-4 w-4" />
-            Permuta
-          </Link>
-          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/solicitar/ft">
-            <SquareChartGantt className="h-4 w-4" />
-            FT
-          </Link>
-          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/minhas-solicitacoes">
-            <ScrollText className="h-4 w-4" />
-            Minhas
-          </Link>
-        </nav>
-
-        <nav className="mt-6 hidden flex-wrap justify-center gap-2 sm:flex">
-          <Button asChild variant="ghost" size="sm">
+        <nav className="mb-5 flex flex-wrap justify-start gap-2">
+          <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link href="/solicitar/permuta">
               <Shuffle className="h-4 w-4" />
-              Permuta (Troca de Folga)
+              <span className="hidden xs:inline">Permuta (Troca de Folga)</span>
+              <span className="inline xs:hidden">Permuta</span>
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link href="/solicitar/ft">
               <SquareChartGantt className="h-4 w-4" />
               FT
             </Link>
           </Button>
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link href="/minhas-solicitacoes">
               <ScrollText className="h-4 w-4" />
-              Minhas solicitações
+              <span className="hidden xs:inline">Minhas solicitações</span>
+              <span className="inline xs:hidden">Minhas</span>
             </Link>
           </Button>
         </nav>
+
+        <section className="flex-1 pb-24 sm:pb-0">{children}</section>
       </div>
     </main>
   );
