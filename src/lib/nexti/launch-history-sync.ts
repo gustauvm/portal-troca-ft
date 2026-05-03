@@ -87,16 +87,6 @@ function compactNumbers(values: Array<number | null | undefined>) {
   );
 }
 
-function compactStrings(values: Array<string | null | undefined>) {
-  return Array.from(
-    new Set(
-      values
-        .map((value) => String(value || "").trim())
-        .filter(Boolean),
-    ),
-  );
-}
-
 function chunks<T>(items: T[], size: number) {
   const result: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
@@ -201,7 +191,7 @@ async function fetchReplacements(token: string, start: string, finish: string) {
   }
 }
 
-async function loadEmployeeIndex(personIds: number[], personExternalIds: string[] = []) {
+async function loadEmployeeIndex(personIds: number[]) {
   const supabase = createSupabaseAdminClient();
   const rows: EmployeeRow[] = [];
   for (const batch of chunks(personIds, 500)) {
@@ -218,49 +208,16 @@ async function loadEmployeeIndex(personIds: number[], personExternalIds: string[
     rows.push(...((data || []) as EmployeeRow[]));
   }
 
-  for (const batch of chunks(personExternalIds, 500)) {
-    const { data, error } = await supabase
-      .from("employee_directory")
-      .select(
-        "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active",
-      )
-      .in("person_external_id", batch);
-
-    if (error) {
-      throw new Error(`Falha ao consultar diretorio local por ID externo: ${error.message}`);
-    }
-    rows.push(...((data || []) as EmployeeRow[]));
-  }
-
   const byPersonId = new Map<number, EmployeeRow>();
-  const byExternalId = new Map<string, EmployeeRow>();
   rows
     .sort((left, right) => Number(right.is_active) - Number(left.is_active))
     .forEach((row) => {
       if (!byPersonId.has(Number(row.nexti_person_id))) {
         byPersonId.set(Number(row.nexti_person_id), row);
       }
-      if (row.person_external_id && !byExternalId.has(row.person_external_id)) {
-        byExternalId.set(row.person_external_id, row);
-      }
     });
 
-  return { byPersonId, byExternalId };
-}
-
-type EmployeeIndex = Awaited<ReturnType<typeof loadEmployeeIndex>>;
-
-function findEmployeeInIndex(index: EmployeeIndex, personId?: number | null, personExternalId?: string | null) {
-  if (personId && index.byPersonId.has(Number(personId))) {
-    return index.byPersonId.get(Number(personId)) || null;
-  }
-
-  const externalId = String(personExternalId || "").trim();
-  if (externalId && index.byExternalId.has(externalId)) {
-    return index.byExternalId.get(externalId) || null;
-  }
-
-  return null;
+  return byPersonId;
 }
 
 function buildHistoryBase(input: {
@@ -314,11 +271,11 @@ function buildHistoryBase(input: {
   };
 }
 
-function mapScheduleTransfer(item: NextiScheduleTransfer, employeeIndex: EmployeeIndex): HistoryInsert | null {
+function mapScheduleTransfer(item: NextiScheduleTransfer, employeeIndex: Map<number, EmployeeRow>): HistoryInsert | null {
   const id = Number(item.id || 0);
   const requestDate = nextiDateTimeToIsoDate(item.transferDateTime);
   if (!id || !requestDate || item.removed) return null;
-  const employee = findEmployeeInIndex(employeeIndex, item.personId, item.personExternalId);
+  const employee = item.personId ? employeeIndex.get(Number(item.personId)) || null : null;
   const row = buildHistoryBase({
     requestType: "swap",
     nextiSource: "schedule_transfer",
@@ -339,12 +296,12 @@ function mapScheduleTransfer(item: NextiScheduleTransfer, employeeIndex: Employe
   return row;
 }
 
-function mapReplacement(item: NextiReplacement, employeeIndex: EmployeeIndex): HistoryInsert | null {
+function mapReplacement(item: NextiReplacement, employeeIndex: Map<number, EmployeeRow>): HistoryInsert | null {
   const id = Number(item.id || 0);
   const requestDate = nextiDateTimeToIsoDate(item.startDateTime);
   if (!id || !requestDate || item.removed) return null;
-  const employee = findEmployeeInIndex(employeeIndex, item.personId, item.personExternalId);
-  const absentee = findEmployeeInIndex(employeeIndex, item.absenteeId, item.absenteeExternalId);
+  const employee = item.personId ? employeeIndex.get(Number(item.personId)) || null : null;
+  const absentee = item.absenteeId ? employeeIndex.get(Number(item.absenteeId)) || null : null;
   const row = buildHistoryBase({
     requestType: "ft",
     nextiSource: "replacement",
@@ -389,74 +346,6 @@ async function upsertHistory(rows: HistoryInsert[]) {
   }
 }
 
-function employeeHistoryFields(employee: EmployeeRow) {
-  return {
-    group_key: employee.group_key,
-    requester_employee_id: employee.id,
-    requester_nexti_person_id: employee.nexti_person_id,
-    requester_person_external_id: employee.person_external_id,
-    requester_name: employee.full_name,
-    requester_enrolment: employee.enrolment,
-    requester_is_active: employee.is_active,
-    company_id: employee.company_id,
-    company_name: employee.company_name,
-    career_id: employee.career_id,
-    career_name: employee.career_name,
-    schedule_id: employee.schedule_id,
-    schedule_name: employee.schedule_name,
-    shift_id: employee.shift_id,
-    shift_external_id: employee.shift_external_id,
-    shift_name: employee.shift_name,
-    workplace_id: employee.workplace_id,
-    workplace_external_id: employee.workplace_external_id,
-    workplace_name: employee.workplace_name,
-    last_synced_at: new Date().toISOString(),
-  } satisfies Database["public"]["Tables"]["nexti_launch_history"]["Update"];
-}
-
-async function relinkNextiLaunchHistory(limit = 1000) {
-  const supabase = createSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from("nexti_launch_history")
-    .select("id, requester_nexti_person_id, requester_person_external_id")
-    .is("requester_employee_id", null)
-    .limit(limit);
-
-  if (error) {
-    throw new Error(`Falha ao buscar historico Nexti sem vinculo: ${error.message}`);
-  }
-
-  const rows = (data || []) as Array<{
-    id: string;
-    requester_nexti_person_id: number | null;
-    requester_person_external_id: string | null;
-  }>;
-  if (rows.length === 0) return 0;
-
-  const employeeIndex = await loadEmployeeIndex(
-    compactNumbers(rows.map((row) => row.requester_nexti_person_id)),
-    compactStrings(rows.map((row) => row.requester_person_external_id)),
-  );
-  let relinked = 0;
-
-  for (const row of rows) {
-    const employee = findEmployeeInIndex(employeeIndex, row.requester_nexti_person_id, row.requester_person_external_id);
-    if (!employee) continue;
-
-    const { error: updateError } = await supabase
-      .from("nexti_launch_history")
-      .update(employeeHistoryFields(employee))
-      .eq("id", row.id);
-
-    if (updateError) {
-      throw new Error(`Falha ao vincular historico Nexti: ${updateError.message}`);
-    }
-    relinked += 1;
-  }
-
-  return relinked;
-}
-
 export async function syncNextiLaunchHistory(input: SyncInput = {}) {
   const mode = input.mode || "incremental";
   const syncKey = `launch-history:${mode}`;
@@ -476,18 +365,13 @@ export async function syncNextiLaunchHistory(input: SyncInput = {}) {
       ...scheduleTransfers.map((item) => item.personId),
       ...replacements.flatMap((item) => [item.personId, item.absenteeId]),
     ]);
-    const personExternalIds = compactStrings([
-      ...scheduleTransfers.map((item) => item.personExternalId),
-      ...replacements.flatMap((item) => [item.personExternalId, item.absenteeExternalId]),
-    ]);
-    const employeeIndex = await loadEmployeeIndex(personIds, personExternalIds);
+    const employeeIndex = await loadEmployeeIndex(personIds);
     const rows = [
       ...scheduleTransfers.map((item) => mapScheduleTransfer(item, employeeIndex)),
       ...replacements.map((item) => mapReplacement(item, employeeIndex)),
     ].filter((row): row is HistoryInsert => row !== null);
 
     await upsertHistory(rows);
-    const relinked = await relinkNextiLaunchHistory();
     await writeSyncState({
       syncKey,
       start,
@@ -497,7 +381,6 @@ export async function syncNextiLaunchHistory(input: SyncInput = {}) {
         fetchedScheduleTransfers: scheduleTransfers.length,
         fetchedReplacements: replacements.length,
         upserted: rows.length,
-        relinked,
       } satisfies Json,
     });
 
@@ -509,7 +392,6 @@ export async function syncNextiLaunchHistory(input: SyncInput = {}) {
       fetchedScheduleTransfers: scheduleTransfers.length,
       fetchedReplacements: replacements.length,
       upserted: rows.length,
-      relinked,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha ao sincronizar historico Nexti.";

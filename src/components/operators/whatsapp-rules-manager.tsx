@@ -77,9 +77,8 @@ export function WhatsappRulesManager() {
             className="grid gap-4 lg:grid-cols-5"
             onSubmit={async (event) => {
               event.preventDefault();
-              const form = event.currentTarget;
-              await saveRule(new FormData(form));
-              form.reset();
+              await saveRule(new FormData(event.currentTarget));
+              event.currentTarget.reset();
             }}
           >
             <div>

@@ -1,16 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useEmployeeOptions } from "@/hooks/use-employee-options";
-import { formatDateRange } from "@/lib/utils";
 import { fetchJson } from "@/lib/utils/fetcher";
+import { getTodayISO } from "@/lib/utils/index";
 
 type EmployeeContext = {
   employee: {
@@ -44,28 +45,17 @@ type ResolveColleagueResponse = {
 const requestTypeConfig = {
   swap: {
     title: "Permuta (Troca de Folga)",
+    description:
+      "Informe o RE do colega. O portal confere nome, unidade, cargo, escala, folha e duplicidade antes de registrar.",
     success: "Permuta registrada. Ela já entrou na fila operacional.",
   },
   ft: {
     title: "FT",
+    description:
+      "Informe unidade, data da folga trabalhada e horário. O motivo da FT será preenchido somente pela operação.",
     success: "Solicitação de FT registrada. Ela já entrou na fila operacional.",
   },
 };
-
-function getTodayIsoDate() {
-  const today = new Date();
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-}
-
-function assertDateIsAllowed(value: string, label: string) {
-  if (!value) {
-    throw new Error(`Informe ${label}.`);
-  }
-
-  if (value < getTodayIsoDate()) {
-    throw new Error(`${label} já passou. Escolha uma data de hoje em diante.`);
-  }
-}
 
 export function EmployeeRequestForm({
   requestType,
@@ -75,6 +65,7 @@ export function EmployeeRequestForm({
   context: EmployeeContext;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [colleagueRe, setColleagueRe] = useState("");
   const deferredColleagueRe = useDeferredValue(colleagueRe);
   const [colleague, setColleague] = useState<ResolvedColleague | null>(null);
@@ -86,7 +77,6 @@ export function EmployeeRequestForm({
   const options = useEmployeeOptions(requestType, "");
   const selectedShift = options.data?.shifts?.find((shift) => shift.id === selectedShiftId);
   const config = requestTypeConfig[requestType];
-  const todayIso = getTodayIsoDate();
 
   useEffect(() => {
     if (requestType !== "swap") return;
@@ -121,21 +111,58 @@ export function EmployeeRequestForm({
   }, [deferredColleagueRe, requestType]);
 
   return (
-    <div className="grid gap-5">
+    <div className="grid gap-5 pb-24 sm:pb-0">
+      <div className="grid grid-cols-2 gap-2 rounded-full bg-white/72 p-1 shadow-[0_14px_32px_rgba(10,20,30,0.08)]">
+        <Button
+          asChild
+          variant={pathname.includes("/permuta") ? "primary" : "ghost"}
+          size="sm"
+          className="min-h-11 rounded-full text-xs sm:text-sm"
+        >
+          <Link href="/solicitar/permuta">Permuta (Troca de Folga)</Link>
+        </Button>
+        <Button
+          asChild
+          variant={pathname.includes("/ft") ? "primary" : "ghost"}
+          size="sm"
+          className="min-h-11 rounded-full text-xs sm:text-sm"
+        >
+          <Link href="/solicitar/ft">FT</Link>
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">{config.title}</CardTitle>
-          <p className="text-sm font-semibold text-[color:var(--ink-600)]">
-            Folha atual: {formatDateRange(context.payroll.periodStart, context.payroll.periodEnd)}
-          </p>
+          <CardDescription>{config.description}</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-6">
+          <div className="grid gap-3 rounded-[24px] bg-[color:var(--surface-150)] p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand-700)]">
+                Colaborador
+              </p>
+              <p className="text-sm font-semibold text-[color:var(--ink-950)]">{context.employee.fullName}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <p className="text-sm text-[color:var(--ink-700)]">{context.employee.companyName}</p>
+              <p className="text-sm text-[color:var(--ink-700)]">
+                {context.employee.careerName || "Cargo não informado"}
+              </p>
+              <p className="text-sm text-[color:var(--ink-700)]">
+                {context.employee.workplaceName || "Unidade não informada"}
+              </p>
+            </div>
+            <p className="text-xs font-semibold text-[color:var(--ink-600)]">
+              Folha atual: {context.payroll.periodStart} até {context.payroll.periodEnd}
+            </p>
+          </div>
+
           <form
             className="grid gap-5"
             onSubmit={(event) => {
               event.preventDefault();
-              const form = event.currentTarget;
-              const formData = new FormData(form);
+              const formData = new FormData(event.currentTarget);
               setPending(true);
               setError("");
               setSuccess("");
@@ -143,42 +170,32 @@ export function EmployeeRequestForm({
               startTransition(() => {
                 void (async () => {
                   try {
-                    const requestDate = String(formData.get("requestDate") || "");
-                    const coverageDate = String(formData.get("coverageDate") || "");
-                    const reason = String(formData.get("reason") || "").trim();
-
                     if (requestType === "swap" && !colleague?.id) {
                       throw new Error(resolveError || "Informe um RE válido para a permuta.");
                     }
-
-                    assertDateIsAllowed(
-                      requestDate,
-                      requestType === "swap" ? "a data em que você vai trabalhar" : "a data da FT",
-                    );
-
-                    if (requestType === "swap") {
-                      assertDateIsAllowed(coverageDate, "a data em que você vai folgar");
-                      if (requestDate === coverageDate) {
-                        throw new Error("As duas datas da permuta não podem ser iguais.");
-                      }
-                      if (reason.length < 8) {
-                        throw new Error("Informe uma justificativa com pelo menos 8 caracteres.");
-                      }
+                    const requestDate = formData.get("requestDate") as string;
+                    const today = getTodayISO();
+                    if (requestDate < today) {
+                      throw new Error("A data não pode ser no passado.");
                     }
 
+                    const reason = formData.get("reason") as string;
+                    if (requestType === "swap" && reason.trim().length < 8) {
+                      throw new Error("O motivo deve ter pelo menos 8 caracteres.");
+                    }
                     const payload =
                       requestType === "swap"
                         ? {
                             requestType,
                             substituteEmployeeId: colleague?.id,
-                            requestDate,
-                            coverageDate,
-                            reason,
+                            requestDate: formData.get("requestDate"),
+                            coverageDate: formData.get("coverageDate"),
+                            reason: formData.get("reason"),
                           }
                         : {
                             requestType,
                             workplaceId: formData.get("workplaceId"),
-                            requestDate,
+                            requestDate: formData.get("requestDate"),
                             shiftId: formData.get("shiftId"),
                             turn: selectedShift?.turn || "indefinido",
                           };
@@ -189,7 +206,7 @@ export function EmployeeRequestForm({
                     });
 
                     setSuccess(config.success);
-                    form.reset();
+                    (event.currentTarget as HTMLFormElement).reset();
                     setColleagueRe("");
                     setColleague(null);
                     setSelectedShiftId("");
@@ -219,7 +236,7 @@ export function EmployeeRequestForm({
                       setColleague(null);
                       setResolveError("");
                     }}
-                    placeholder="Digite a Matrícula/RE do colega"
+                    placeholder="Digite a matrícula (123-4567 ou 4567)"
                     inputMode="numeric"
                     required
                   />
@@ -283,13 +300,13 @@ export function EmployeeRequestForm({
                 <Label htmlFor="requestDate">
                   {requestType === "swap" ? "Data da sua folga" : "Data da FT"}
                 </Label>
-                <Input id="requestDate" name="requestDate" type="date" min={todayIso} required />
+                <Input id="requestDate" name="requestDate" type="date" min={getTodayISO()} required />
               </div>
 
               {requestType === "swap" ? (
                 <div>
                   <Label htmlFor="coverageDate">Data de pagamento ao colega</Label>
-                  <Input id="coverageDate" name="coverageDate" type="date" min={todayIso} required />
+                  <Input id="coverageDate" name="coverageDate" type="date" min={getTodayISO()} required />
                 </div>
               ) : null}
             </div>
@@ -301,7 +318,6 @@ export function EmployeeRequestForm({
                   id="reason"
                   name="reason"
                   required
-                  minLength={8}
                   placeholder="Explique o motivo da permuta para a operação."
                 />
               </div>

@@ -213,7 +213,6 @@ export type Database = {
           rejected_by: string | null;
           cancelled_at: string | null;
           cancelled_by_employee_id: string | null;
-          cancel_reason: string | null;
           launched_at: string | null;
           assigned_operator_user_id: string | null;
           assigned_operator_name: string | null;
@@ -285,7 +284,6 @@ export type Database = {
           rejected_by?: string | null;
           cancelled_at?: string | null;
           cancelled_by_employee_id?: string | null;
-          cancel_reason?: string | null;
           launched_at?: string | null;
           assigned_operator_user_id?: string | null;
           assigned_operator_name?: string | null;

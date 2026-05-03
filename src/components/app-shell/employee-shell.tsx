@@ -1,24 +1,7 @@
 import Link from "next/link";
 import { ScrollText, Shuffle, SquareChartGantt } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { EmployeeSignOutButton } from "@/components/app-shell/signout-buttons";
-
-const employeeNavItems = [
-  {
-    href: "/solicitar/permuta",
-    label: "Permuta (Troca de Folga)",
-    icon: Shuffle,
-  },
-  {
-    href: "/solicitar/ft",
-    label: "FT",
-    icon: SquareChartGantt,
-  },
-  {
-    href: "/minhas-solicitacoes",
-    label: "Minhas solicitações",
-    icon: ScrollText,
-  },
-] as const;
 
 export function EmployeeShell({
   employee,
@@ -28,7 +11,6 @@ export function EmployeeShell({
     fullName: string;
     companyName: string;
     careerName: string | null;
-    workplaceName: string | null;
   };
   children: React.ReactNode;
 }) {
@@ -47,30 +29,49 @@ export function EmployeeShell({
               <p className="truncate text-sm text-[color:var(--ink-600)]">
                 {employee.companyName}
                 {employee.careerName ? ` • ${employee.careerName}` : ""}
-                {employee.workplaceName ? ` • ${employee.workplaceName}` : ""}
               </p>
             </div>
             <EmployeeSignOutButton />
           </div>
-
-          <nav className="mt-4 grid grid-cols-3 gap-2 rounded-[22px] bg-[color:var(--surface-150)] p-1">
-            {employeeNavItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex min-h-12 items-center justify-center gap-2 rounded-[18px] px-2 text-center text-[11px] font-semibold leading-tight text-[color:var(--ink-850)] transition hover:bg-white/80 sm:text-sm"
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
         </header>
 
         <section className="flex-1">{children}</section>
+
+        <nav className="fixed inset-x-3 bottom-3 z-30 mx-auto grid max-w-md grid-cols-3 gap-1 rounded-full border border-white/70 bg-white/92 p-1 shadow-[0_18px_50px_rgba(10,20,30,0.16)] backdrop-blur-xl sm:hidden">
+          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/solicitar/permuta">
+            <Shuffle className="h-4 w-4" />
+            Permuta
+          </Link>
+          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/solicitar/ft">
+            <SquareChartGantt className="h-4 w-4" />
+            FT
+          </Link>
+          <Link className="grid min-h-14 place-items-center rounded-full text-[11px] font-semibold text-[color:var(--ink-800)]" href="/minhas-solicitacoes">
+            <ScrollText className="h-4 w-4" />
+            Minhas
+          </Link>
+        </nav>
+
+        <nav className="mt-6 hidden flex-wrap justify-center gap-2 sm:flex">
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/solicitar/permuta">
+              <Shuffle className="h-4 w-4" />
+              Permuta (Troca de Folga)
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/solicitar/ft">
+              <SquareChartGantt className="h-4 w-4" />
+              FT
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/minhas-solicitacoes">
+              <ScrollText className="h-4 w-4" />
+              Minhas solicitações
+            </Link>
+          </Button>
+        </nav>
       </div>
     </main>
   );
