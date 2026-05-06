@@ -5,10 +5,11 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import {
   fetchAllPages,
   fetchNextiToken,
+  formatNextiDate,
   nextiDateTimeToIsoDate,
   nextiDateTimeToIsoString,
 } from "@/lib/nexti/client";
-import { getPayrollWindowForDate } from "@/lib/utils/payroll";
+import { getPayrollWindowForDate, getPayrollWindowFromReference } from "@/lib/utils/payroll";
 
 type HistoryInsert = Database["public"]["Tables"]["nexti_launch_history"]["Insert"];
 type EmployeeRow = Pick<
@@ -21,6 +22,7 @@ type EmployeeRow = Pick<
   | "group_key"
   | "company_id"
   | "company_name"
+  | "company_number"
   | "career_id"
   | "career_name"
   | "schedule_id"
@@ -75,6 +77,12 @@ type SyncInput = {
   start?: string | null;
   finish?: string | null;
   mode?: "incremental" | "backfill";
+};
+
+type EmployeeHistorySyncInput = {
+  employeeId: string;
+  payrollReference: string;
+  force?: boolean;
 };
 
 function compactNumbers(values: Array<number | null | undefined>) {
@@ -201,6 +209,53 @@ async function fetchReplacements(token: string, start: string, finish: string) {
   }
 }
 
+async function fetchScheduleTransfersForEmployee(token: string, employee: EmployeeRow, start: string, finish: string) {
+  const personId = Number(employee.nexti_person_id || 0);
+  const personExternalId = String(employee.person_external_id || "").trim();
+  const path = personId
+    ? `/scheduletransfers/person/${personId}/start/${encodeURIComponent(start)}/finish/${encodeURIComponent(finish)}`
+    : personExternalId
+      ? `/scheduletransfers/personexternal/${encodeURIComponent(personExternalId)}/start/${encodeURIComponent(start)}/finish/${encodeURIComponent(finish)}`
+      : null;
+
+  if (!path) return [];
+
+  try {
+    return await fetchAllPages<NextiScheduleTransfer>(path, token, {}, 250);
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("Não foi encontrado nenhum dado") || error.message.includes("Registro nao encontrado"))
+    ) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function fetchReplacementsForEmployee(token: string, employee: EmployeeRow, start: string, finish: string) {
+  const personExternalId = String(employee.person_external_id || "").trim();
+  const companyNumber = String(employee.company_number || "").trim();
+  if (!personExternalId || !companyNumber) return [];
+
+  try {
+    return await fetchAllPages<NextiReplacement>(
+      `/replacements/companynumber/${encodeURIComponent(companyNumber)}/start/${encodeURIComponent(start)}/finish/${encodeURIComponent(finish)}/externalId/${encodeURIComponent(personExternalId)}`,
+      token,
+      {},
+      250,
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.message.includes("Não foi encontrado nenhum dado") || error.message.includes("Registro nao encontrado"))
+    ) {
+      return [];
+    }
+    throw error;
+  }
+}
+
 async function loadEmployeeIndex(personIds: number[], personExternalIds: string[] = []) {
   const supabase = createSupabaseAdminClient();
   const rows: EmployeeRow[] = [];
@@ -208,7 +263,7 @@ async function loadEmployeeIndex(personIds: number[], personExternalIds: string[
     const { data, error } = await supabase
       .from("employee_directory")
       .select(
-        "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active",
+        "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, company_number, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active",
       )
       .in("nexti_person_id", batch);
 
@@ -222,7 +277,7 @@ async function loadEmployeeIndex(personIds: number[], personExternalIds: string[
     const { data, error } = await supabase
       .from("employee_directory")
       .select(
-        "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active",
+        "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, company_number, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active",
       )
       .in("person_external_id", batch);
 
@@ -246,6 +301,49 @@ async function loadEmployeeIndex(personIds: number[], personExternalIds: string[
     });
 
   return { byPersonId, byExternalId };
+}
+
+async function loadEmployeeById(employeeId: string) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("employee_directory")
+    .select(
+      "id, nexti_person_id, person_external_id, enrolment, full_name, group_key, company_id, company_name, career_id, career_name, schedule_id, schedule_name, shift_id, shift_external_id, shift_name, workplace_id, workplace_external_id, workplace_name, admission_date, is_active, company_number",
+    )
+    .eq("id", employeeId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Falha ao consultar colaborador para historico Nexti: ${error.message}`);
+  }
+
+  return data as EmployeeRow | null;
+}
+
+async function isEmployeeHistorySyncFresh(syncKey: string, maxAgeHours = 12) {
+  const supabase = createSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from("nexti_launch_history_sync_state")
+    .select("last_success_at, last_error, updated_at")
+    .eq("sync_key", syncKey)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Falha ao consultar cursor de historico do colaborador: ${error.message}`);
+  }
+
+  if (!data) return false;
+
+  if (data.last_error && data.updated_at) {
+    const lastAttemptTime = new Date(data.updated_at).getTime();
+    if (Number.isFinite(lastAttemptTime) && Date.now() - lastAttemptTime <= 30 * 60_000) {
+      return true;
+    }
+  }
+
+  if (!data?.last_success_at) return false;
+  const lastSuccessTime = new Date(data.last_success_at).getTime();
+  return Number.isFinite(lastSuccessTime) && Date.now() - lastSuccessTime <= maxAgeHours * 60 * 60_000;
 }
 
 type EmployeeIndex = Awaited<ReturnType<typeof loadEmployeeIndex>>;
@@ -519,6 +617,98 @@ export async function syncNextiLaunchHistory(input: SyncInput = {}) {
       errorMessage: message,
       metadata: {
         mode,
+        failedAt: new Date().toISOString(),
+      } satisfies Json,
+    });
+    throw error;
+  }
+}
+
+export async function syncNextiLaunchHistoryForEmployee(input: EmployeeHistorySyncInput) {
+  const employee = await loadEmployeeById(input.employeeId);
+  if (!employee?.is_active) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "employee_inactive_or_not_found",
+    };
+  }
+
+  const payroll = getPayrollWindowFromReference(input.payrollReference);
+  const syncKey = `launch-history:employee:${input.employeeId}:${payroll.reference}`;
+  if (!input.force && (await isEmployeeHistorySyncFresh(syncKey))) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "fresh",
+    };
+  }
+
+  const start = formatNextiDate(payroll.periodStart, "000000");
+  const finish = formatNextiDate(payroll.periodEnd, "235959");
+  const token = await fetchNextiToken();
+
+  try {
+    const [scheduleTransfers, replacements] = await Promise.all([
+      fetchScheduleTransfersForEmployee(token, employee, start, finish),
+      fetchReplacementsForEmployee(token, employee, start, finish),
+    ]);
+    const personIds = compactNumbers([
+      employee.nexti_person_id,
+      ...scheduleTransfers.map((item) => item.personId),
+      ...replacements.flatMap((item) => [item.personId, item.absenteeId]),
+    ]);
+    const personExternalIds = compactStrings([
+      employee.person_external_id,
+      ...scheduleTransfers.map((item) => item.personExternalId),
+      ...replacements.flatMap((item) => [item.personExternalId, item.absenteeExternalId]),
+    ]);
+    const employeeIndex = await loadEmployeeIndex(personIds, personExternalIds);
+    employeeIndex.byPersonId.set(Number(employee.nexti_person_id), employee);
+    if (employee.person_external_id) employeeIndex.byExternalId.set(employee.person_external_id, employee);
+
+    const rows = [
+      ...scheduleTransfers.map((item) => mapScheduleTransfer(item, employeeIndex)),
+      ...replacements.map((item) => mapReplacement(item, employeeIndex)),
+    ].filter((row): row is HistoryInsert => row !== null);
+
+    await upsertHistory(rows);
+    const relinked = await relinkNextiLaunchHistory(250);
+    await writeSyncState({
+      syncKey,
+      start,
+      finish,
+      metadata: {
+        mode: "employee",
+        employeeId: input.employeeId,
+        payrollReference: payroll.reference,
+        fetchedScheduleTransfers: scheduleTransfers.length,
+        fetchedReplacements: replacements.length,
+        upserted: rows.length,
+        relinked,
+      } satisfies Json,
+    });
+
+    return {
+      ok: true,
+      skipped: false,
+      payrollReference: payroll.reference,
+      fetchedScheduleTransfers: scheduleTransfers.length,
+      fetchedReplacements: replacements.length,
+      upserted: rows.length,
+      relinked,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao sincronizar historico do colaborador.";
+    await writeSyncState({
+      syncKey,
+      start,
+      finish,
+      errorMessage: message,
+      metadata: {
+        mode: "employee",
+        employeeId: input.employeeId,
+        payrollReference: payroll.reference,
         failedAt: new Date().toISOString(),
       } satisfies Json,
     });
