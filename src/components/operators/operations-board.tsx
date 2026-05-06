@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import type { Route } from "next";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Download, Search } from "lucide-react";
+import { useDeferredValue, useMemo, useState } from "react";
+import { Download, RefreshCw, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -13,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { LaunchStatusPill, WorkflowStatusPill } from "@/components/ui/status-pill";
 import { useOpsRequests } from "@/hooks/use-ops-requests";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { OperatorFiltersResponse, PortalRequestRecord } from "@/lib/types";
 import { formatBrazilianDate } from "@/lib/utils";
 
@@ -26,7 +24,6 @@ export function OperationsBoard({
   defaultPayrollReference: string;
   isAdmin?: boolean;
 }) {
-  const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     page: 1,
     limit: 25,
@@ -48,24 +45,6 @@ export function OperationsBoard({
     ...filters,
     search: deferredSearch,
   });
-
-  useEffect(() => {
-    const supabase = createSupabaseBrowserClient();
-    const channel = supabase
-      .channel("portal-requests-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "portal_requests" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["ops-requests"] });
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
 
   const items = useMemo<PortalRequestRecord[]>(() => query.data?.items ?? [], [query.data?.items]);
   const csvRows = useMemo(() => {
@@ -140,6 +119,10 @@ export function OperationsBoard({
               <Button variant="secondary" onClick={exportCsv}>
                 <Download className="h-4 w-4" />
                 Exportar CSV
+              </Button>
+              <Button variant="secondary" onClick={() => void query.refetch()} disabled={query.isFetching}>
+                <RefreshCw className="h-4 w-4" />
+                {query.isFetching ? "Atualizando..." : "Atualizar"}
               </Button>
             </div>
           </div>

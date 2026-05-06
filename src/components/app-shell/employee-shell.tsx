@@ -1,7 +1,27 @@
 import Link from "next/link";
 import { ScrollText, Shuffle, SquareChartGantt } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { EmployeeSignOutButton } from "@/components/app-shell/signout-buttons";
+
+const employeeNavItems = [
+  {
+    href: "/solicitar/permuta",
+    label: "Permuta (Troca de Folga)",
+    shortLabel: "Permuta",
+    icon: Shuffle,
+  },
+  {
+    href: "/solicitar/ft",
+    label: "FT",
+    shortLabel: "FT",
+    icon: SquareChartGantt,
+  },
+  {
+    href: "/minhas-solicitacoes",
+    label: "Minhas solicitações",
+    shortLabel: "Minhas",
+    icon: ScrollText,
+  },
+] as const;
 
 export function EmployeeShell({
   employee,
@@ -11,6 +31,7 @@ export function EmployeeShell({
     fullName: string;
     companyName: string;
     careerName: string | null;
+    workplaceName: string | null;
   };
   children: React.ReactNode;
 }) {
@@ -29,36 +50,31 @@ export function EmployeeShell({
               <p className="truncate text-sm text-[color:var(--ink-600)]">
                 {employee.companyName}
                 {employee.careerName ? ` • ${employee.careerName}` : ""}
+                {employee.workplaceName ? ` • ${employee.workplaceName}` : ""}
               </p>
             </div>
             <EmployeeSignOutButton />
           </div>
+
+          <nav className="mt-4 grid grid-cols-3 gap-2 rounded-[22px] bg-[color:var(--surface-150)] p-1">
+            {employeeNavItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="flex min-h-12 items-center justify-center gap-2 rounded-[18px] px-2 text-center text-[11px] font-semibold leading-tight text-[color:var(--ink-800)] transition hover:bg-white/80 sm:text-sm"
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="hidden min-[420px]:inline">{item.label}</span>
+                  <span className="inline min-[420px]:hidden">{item.shortLabel}</span>
+                </Link>
+              );
+            })}
+          </nav>
         </header>
 
-        <nav className="mb-5 flex flex-wrap justify-start gap-2">
-          <Button asChild variant="ghost" size="sm" className="gap-2">
-            <Link href="/solicitar/permuta">
-              <Shuffle className="h-4 w-4" />
-              <span className="hidden xs:inline">Permuta (Troca de Folga)</span>
-              <span className="inline xs:hidden">Permuta</span>
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="gap-2">
-            <Link href="/solicitar/ft">
-              <SquareChartGantt className="h-4 w-4" />
-              FT
-            </Link>
-          </Button>
-          <Button asChild variant="ghost" size="sm" className="gap-2">
-            <Link href="/minhas-solicitacoes">
-              <ScrollText className="h-4 w-4" />
-              <span className="hidden xs:inline">Minhas solicitações</span>
-              <span className="inline xs:hidden">Minhas</span>
-            </Link>
-          </Button>
-        </nav>
-
-        <section className="flex-1 pb-24 sm:pb-0">{children}</section>
+        <section className="flex-1">{children}</section>
       </div>
     </main>
   );

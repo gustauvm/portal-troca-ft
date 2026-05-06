@@ -1,7 +1,5 @@
 import "server-only";
 
-import { createClient } from "@supabase/supabase-js";
-import { getAppConfig, getSupabaseConfig } from "@/lib/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import type { OperatorAccessRecord, OperatorRole } from "@/lib/types";
@@ -285,23 +283,14 @@ export async function createOperatorFirstAccess(input: {
     throw new Error("Este e-mail já tem conta. Use Entrar ou Trocar senha.");
   }
 
-  const config = getSupabaseConfig();
-  const appConfig = getAppConfig();
-  const anonClient = createClient<Database>(config.url, config.anonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-  const { data, error } = await anonClient.auth.signUp({
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin.auth.admin.createUser({
     email,
     password: input.password,
-    options: {
-      emailRedirectTo: `${appConfig.appUrl.replace(/\/$/, "")}/operacao/auth/callback`,
-      data: {
-        role: access.role,
-        access_id: access.id,
-      },
+    email_confirm: true,
+    user_metadata: {
+      role: access.role,
+      access_id: access.id,
     },
   });
 
@@ -310,7 +299,44 @@ export async function createOperatorFirstAccess(input: {
   }
 
   await syncOperatorProfileForUser({ userId: data.user.id, email });
-  return { ok: true, requiresConfirmation: !data.session };
+  return { ok: true, requiresConfirmation: false };
+}
+
+export async function resetOperatorPasswordDirect(input: {
+  email: string;
+  password: string;
+  confirmation: string;
+}) {
+  const email = normalizeOperatorEmail(input.email);
+  if (input.password.length < 8) {
+    throw new Error("A senha precisa ter pelo menos 8 caracteres.");
+  }
+  if (input.password !== input.confirmation) {
+    throw new Error("As senhas não conferem.");
+  }
+
+  const access = await getActiveOperatorAccessByEmail(email);
+  if (!access) {
+    throw new Error("Este e-mail não está liberado para acesso operacional.");
+  }
+
+  const authUser = await findAuthUserByEmail(email);
+  if (!authUser) {
+    throw new Error("Conta ainda não criada. Use Primeiro acesso para definir a senha inicial.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const { error } = await admin.auth.admin.updateUserById(authUser.id, {
+    password: input.password,
+    user_metadata: {
+      role: access.role,
+      access_id: access.id,
+    },
+  });
+  if (error) throw new Error(error.message || "Não foi possível atualizar a senha.");
+
+  await syncOperatorProfileForUser({ userId: authUser.id, email });
+  return { ok: true, mode: "direct_reset" as const };
 }
 
 export async function requestOperatorPasswordEmail(emailInput: string) {
@@ -320,9 +346,6 @@ export async function requestOperatorPasswordEmail(emailInput: string) {
     throw new Error("Este e-mail não está liberado para acesso operacional.");
   }
 
-  const config = getSupabaseConfig();
-  const appConfig = getAppConfig();
-  const redirectTo = `${appConfig.appUrl.replace(/\/$/, "")}/operacao/auth/callback`;
   const authUser = await findAuthUserByEmail(email);
 
   if (!authUser) {
@@ -330,13 +353,5 @@ export async function requestOperatorPasswordEmail(emailInput: string) {
   }
 
   await syncOperatorProfileForUser({ userId: authUser.id, email });
-  const anonClient = createClient<Database>(config.url, config.anonKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-  const { error } = await anonClient.auth.resetPasswordForEmail(email, { redirectTo });
-  if (error) throw new Error(error.message || "Não foi possível enviar o link de senha.");
-  return { ok: true, mode: "recovery" as const };
+  return { ok: true, mode: "recovery_disabled" as const };
 }

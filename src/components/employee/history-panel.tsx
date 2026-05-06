@@ -7,26 +7,91 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select } from "@/components/ui/select";
 import { LaunchStatusPill, WorkflowStatusPill } from "@/components/ui/status-pill";
+import { Textarea } from "@/components/ui/textarea";
 import { useHistory } from "@/hooks/use-history";
-import { useRequestStream } from "@/hooks/use-request-stream";
 import { fetchJson } from "@/lib/utils/fetcher";
-import { formatBrazilianDate } from "@/lib/utils";
+import { formatBrazilianDate, formatPayrollReferenceLabel } from "@/lib/utils";
 import type { EmployeeHistoryItem } from "@/lib/types";
+
+type PayrollOption = { reference: string; periodStart: string; periodEnd: string };
+
+function getReferenceYear(reference: string) {
+  return String(reference || "").slice(0, 4);
+}
+
+function buildSwapDetailRows(item: EmployeeHistoryItem) {
+  if (item.requestType !== "swap" || !item.coverageDate || !item.substituteName) return [];
+
+  if (item.viewerRole === "substitute") {
+    return [
+      {
+        date: item.requestDate,
+        leftLabel: "Você trabalha",
+        rightLabel: `${item.requesterName} folga`,
+      },
+      {
+        date: item.coverageDate,
+        leftLabel: "Você folga",
+        rightLabel: `${item.requesterName} trabalha`,
+      },
+    ];
+  }
+
+  return [
+    {
+      date: item.requestDate,
+      leftLabel: "Você folga",
+      rightLabel: `${item.substituteName} trabalha`,
+    },
+    {
+      date: item.coverageDate,
+      leftLabel: "Você trabalha",
+      rightLabel: `${item.substituteName} folga`,
+    },
+  ];
+}
 
 export function HistoryPanel({ initialPayrollReference }: { initialPayrollReference: string }) {
   const queryClient = useQueryClient();
   const [payrollReference, setPayrollReference] = useState(initialPayrollReference);
+  const [selectedYear, setSelectedYear] = useState(getReferenceYear(initialPayrollReference));
   const [requestType, setRequestType] = useState<"all" | "swap" | "ft">("all");
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [cancelPending, setCancelPending] = useState(false);
   const history = useHistory(payrollReference, requestType);
-  useRequestStream(payrollReference);
 
   async function cancelRequest(requestId: string) {
-    await fetchJson(`/api/requests/${requestId}/cancel`, { method: "POST" });
-    await queryClient.invalidateQueries({ queryKey: ["history", payrollReference, requestType] });
+    const reason = cancelReason.trim();
+    if (reason.length < 8) {
+      setCancelError("Informe o motivo do cancelamento com pelo menos 8 caracteres.");
+      return;
+    }
+
+    setCancelPending(true);
+    setCancelError("");
+    try {
+      await fetchJson(`/api/requests/${requestId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      setCancelTarget(null);
+      setCancelReason("");
+      await queryClient.invalidateQueries({ queryKey: ["history", payrollReference, requestType] });
+    } catch (error) {
+      setCancelError(error instanceof Error ? error.message : "Não foi possível cancelar a solicitação.");
+    } finally {
+      setCancelPending(false);
+    }
   }
 
   const items = history.data?.items || [];
-  const payrollOptions = history.data?.payrollOptions || [];
+  const payrollOptions = (history.data?.payrollOptions || []) as PayrollOption[];
+  const yearOptions = Array.from(new Set(payrollOptions.map((option) => getReferenceYear(option.reference)))).sort(
+    (left, right) => Number(right) - Number(left),
+  );
+  const monthOptions = payrollOptions.filter((option) => getReferenceYear(option.reference) === selectedYear);
 
   return (
     <div className="grid gap-6">
@@ -38,12 +103,26 @@ export function HistoryPanel({ initialPayrollReference }: { initialPayrollRefere
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className="grid gap-3 sm:grid-cols-[9rem_minmax(0,1fr)_16rem]">
+            <Select
+              value={selectedYear}
+              onChange={(event) => {
+                const nextYear = event.target.value;
+                setSelectedYear(nextYear);
+                const firstMonth = payrollOptions.find((option) => getReferenceYear(option.reference) === nextYear);
+                if (firstMonth) setPayrollReference(firstMonth.reference);
+              }}
+            >
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </Select>
             <Select value={payrollReference} onChange={(event) => setPayrollReference(event.target.value)}>
-              {payrollOptions.map((option: { reference: string; periodStart: string; periodEnd: string }) => (
+              {monthOptions.map((option) => (
                 <option key={option.reference} value={option.reference}>
-                  {option.reference} • {formatBrazilianDate(option.periodStart)} a{" "}
-                  {formatBrazilianDate(option.periodEnd)}
+                  {formatPayrollReferenceLabel(option)}
                 </option>
               ))}
             </Select>
@@ -104,11 +183,30 @@ export function HistoryPanel({ initialPayrollReference }: { initialPayrollRefere
                     <span className="font-semibold text-[color:var(--ink-950)]">Solicitante:</span>{" "}
                     {item.requesterName}
                   </p>
-                  <p>
-                    <span className="font-semibold text-[color:var(--ink-950)]">Colega:</span>{" "}
-                    {item.substituteName || "Não se aplica"}
-                  </p>
+                  {item.requestType === "swap" && item.substituteName ? (
+                    <p>
+                      <span className="font-semibold text-[color:var(--ink-950)]">Colega:</span>{" "}
+                      {item.substituteName}
+                    </p>
+                  ) : null}
                 </div>
+
+                {item.requestType === "swap" && buildSwapDetailRows(item).length > 0 ? (
+                  <div className="grid gap-2 rounded-[22px] bg-[color:var(--surface-150)] p-3">
+                    {buildSwapDetailRows(item).map((row) => (
+                      <div
+                        key={`${item.id}-${row.date}`}
+                        className="grid gap-1 rounded-2xl bg-white/70 px-3 py-3 text-sm sm:grid-cols-[7rem_1fr_1fr]"
+                      >
+                        <span className="font-semibold text-[color:var(--ink-950)]">
+                          {formatBrazilianDate(row.date)}
+                        </span>
+                        <span>{row.leftLabel}</span>
+                        <span className="text-[color:var(--ink-600)]">{row.rightLabel}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
 
                 <p className="text-sm leading-6 text-[color:var(--ink-700)]">
                   {item.requestType === "ft"
@@ -124,15 +222,55 @@ export function HistoryPanel({ initialPayrollReference }: { initialPayrollRefere
                 </p>
 
                 {item.canCancel ? (
-                  <div className="flex justify-end">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => cancelRequest(item.id)}
-                    >
-                      Cancelar solicitação
-                    </Button>
-                  </div>
+                  cancelTarget === item.id ? (
+                    <div className="grid gap-3 rounded-[22px] bg-white/70 p-4">
+                      <Textarea
+                        value={cancelReason}
+                        onChange={(event) => setCancelReason(event.target.value)}
+                        placeholder="Informe o motivo do cancelamento."
+                        minLength={8}
+                      />
+                      {cancelError ? (
+                        <p className="text-sm text-[color:var(--danger-700)]">{cancelError}</p>
+                      ) : null}
+                      <div className="grid gap-2 sm:flex sm:justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setCancelTarget(null);
+                            setCancelReason("");
+                            setCancelError("");
+                          }}
+                          disabled={cancelPending}
+                        >
+                          Voltar
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => void cancelRequest(item.id)}
+                          disabled={cancelPending}
+                        >
+                          {cancelPending ? "Cancelando..." : "Confirmar cancelamento"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setCancelTarget(item.id);
+                          setCancelReason("");
+                          setCancelError("");
+                        }}
+                      >
+                        Cancelar solicitação
+                      </Button>
+                    </div>
+                  )
                 ) : null}
               </CardContent>
             </Card>

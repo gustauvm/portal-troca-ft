@@ -30,5 +30,6 @@ export function useOpsLaunchHistory(filters: OpsLaunchHistoryFilters) {
   return useQuery({
     queryKey: ["ops-launch-history", filters],
     queryFn: () => fetchJson<OpsLaunchHistoryResponse>(`/api/ops/launch-history?${params.toString()}`),
+    staleTime: 60_000,
   });
 }

@@ -62,14 +62,16 @@ export default async function RequestDetailPage({ params }: Props) {
                     {formatBrazilianDate(request.requestDate)}
                   </p>
                 </div>
-                <div className="rounded-3xl bg-[color:var(--surface-150)] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand-700)]">
-                    Data de compensação
-                  </p>
-                  <p className="mt-1 text-lg font-semibold text-[color:var(--ink-950)]">
-                    {request.coverageDate ? formatBrazilianDate(request.coverageDate) : "Não se aplica"}
-                  </p>
-                </div>
+                {request.coverageDate ? (
+                  <div className="rounded-3xl bg-[color:var(--surface-150)] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand-700)]">
+                      Data de compensação
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-[color:var(--ink-950)]">
+                      {formatBrazilianDate(request.coverageDate)}
+                    </p>
+                  </div>
+                ) : null}
               </div>
 
               <div className="rounded-[28px] border border-black/6 bg-white/75 p-5">

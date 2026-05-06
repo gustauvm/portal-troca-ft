@@ -18,5 +18,6 @@ export function useOpsRequests(filters: Filters) {
   return useQuery({
     queryKey: ["ops-requests", searchParams.toString()],
     queryFn: () => fetchJson<OpsRequestsResponse>(`/api/ops/requests?${searchParams.toString()}`),
+    staleTime: 30_000,
   });
 }

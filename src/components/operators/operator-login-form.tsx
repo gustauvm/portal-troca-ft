@@ -68,7 +68,7 @@ export function OperatorLoginForm() {
       setMessage(
         result.requiresConfirmation
           ? "Conta criada. Confirme pelo link enviado ao e-mail e depois entre."
-          : "Senha criada. Use a aba Entrar para acessar a operação.",
+          : "Senha criada. Use a aba Entrar para acessar a operação. Não precisa abrir link de e-mail.",
       );
       setActiveTab("login");
     } catch (submitError) {
@@ -86,9 +86,14 @@ export function OperatorLoginForm() {
     try {
       await fetchJson("/api/ops/auth/request-password", {
         method: "POST",
-        body: JSON.stringify({ email: formData.get("email") }),
+        body: JSON.stringify({
+          email: formData.get("email"),
+          password: formData.get("password"),
+          confirmation: formData.get("confirmation"),
+        }),
       });
-      setMessage("Link enviado. Abra o e-mail e defina a nova senha.");
+      setMessage("Senha alterada. Use a aba Entrar para acessar a operação.");
+      setActiveTab("login");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Não foi possível enviar o link.");
     } finally {
@@ -135,21 +140,19 @@ export function OperatorLoginForm() {
             <Input id="operatorEmail" name="email" type="email" autoComplete="email" required />
           </div>
 
-          {activeTab !== "reset" ? (
-            <div>
-              <Label htmlFor="operatorPassword">Senha</Label>
-              <Input
-                id="operatorPassword"
-                name="password"
-                type="password"
-                minLength={activeTab === "first-access" ? 8 : undefined}
-                autoComplete={activeTab === "login" ? "current-password" : "new-password"}
-                required
-              />
-            </div>
-          ) : null}
+          <div>
+            <Label htmlFor="operatorPassword">{activeTab === "login" ? "Senha" : "Nova senha"}</Label>
+            <Input
+              id="operatorPassword"
+              name="password"
+              type="password"
+              minLength={activeTab === "login" ? undefined : 8}
+              autoComplete={activeTab === "login" ? "current-password" : "new-password"}
+              required
+            />
+          </div>
 
-          {activeTab === "first-access" ? (
+          {activeTab === "first-access" || activeTab === "reset" ? (
             <div>
               <Label htmlFor="operatorConfirmation">Repetir senha</Label>
               <Input
@@ -180,9 +183,9 @@ export function OperatorLoginForm() {
               ? "Processando..."
               : activeTab === "login"
                 ? "Entrar"
-                : activeTab === "first-access"
+              : activeTab === "first-access"
                   ? "Criar conta"
-                  : "Enviar link"}
+                  : "Trocar senha"}
           </Button>
         </form>
       </CardContent>

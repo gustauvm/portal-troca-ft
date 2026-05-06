@@ -1,17 +1,16 @@
 "use client";
 
-import Link from "next/link";
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useEmployeeOptions } from "@/hooks/use-employee-options";
 import { fetchJson } from "@/lib/utils/fetcher";
-import { getTodayISO } from "@/lib/utils/index";
+import { formatDateRange, getTodayISO } from "@/lib/utils/index";
 
 type EmployeeContext = {
   employee: {
@@ -63,7 +62,6 @@ export function EmployeeRequestForm({
   context: EmployeeContext;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [colleagueRe, setColleagueRe] = useState("");
   const deferredColleagueRe = useDeferredValue(colleagueRe);
   const [colleague, setColleague] = useState<ResolvedColleague | null>(null);
@@ -110,57 +108,20 @@ export function EmployeeRequestForm({
 
   return (
     <div className="grid gap-5">
-      <div className="grid grid-cols-2 gap-2 rounded-full bg-white/72 p-1 shadow-[0_14px_32px_rgba(10,20,30,0.08)]">
-        <Button
-          asChild
-          variant={pathname.includes("/permuta") ? "primary" : "ghost"}
-          size="sm"
-          className="min-h-11 rounded-full text-xs sm:text-sm"
-        >
-          <Link href="/solicitar/permuta">Permuta (Troca de Folga)</Link>
-        </Button>
-        <Button
-          asChild
-          variant={pathname.includes("/ft") ? "primary" : "ghost"}
-          size="sm"
-          className="min-h-11 rounded-full text-xs sm:text-sm"
-        >
-          <Link href="/solicitar/ft">FT</Link>
-        </Button>
-      </div>
-
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">{config.title}</CardTitle>
-          {config.description && <CardDescription>{config.description}</CardDescription>}
+          <p className="text-sm font-semibold text-[color:var(--ink-600)]">
+            Folha atual: {formatDateRange(context.payroll.periodStart, context.payroll.periodEnd)}
+          </p>
         </CardHeader>
         <CardContent className="grid gap-6">
-          <div className="grid gap-3 rounded-[24px] bg-[color:var(--surface-150)] p-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--brand-700)]">
-                Colaborador
-              </p>
-              <p className="text-sm font-semibold text-[color:var(--ink-950)]">{context.employee.fullName}</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <p className="text-sm text-[color:var(--ink-700)]">{context.employee.companyName}</p>
-              <p className="text-sm text-[color:var(--ink-700)]">
-                {context.employee.careerName || "Cargo não informado"}
-              </p>
-              <p className="text-sm text-[color:var(--ink-700)]">
-                {context.employee.workplaceName || "Unidade não informada"}
-              </p>
-            </div>
-            <p className="text-xs font-semibold text-[color:var(--ink-600)]">
-              Folha atual: {context.payroll.periodStart} até {context.payroll.periodEnd}
-            </p>
-          </div>
-
           <form
             className="grid gap-5"
             onSubmit={(event) => {
               event.preventDefault();
-              const formData = new FormData(event.currentTarget);
+              const form = event.currentTarget;
+              const formData = new FormData(form);
               setPending(true);
               setError("");
               setSuccess("");
@@ -172,6 +133,7 @@ export function EmployeeRequestForm({
                       throw new Error(resolveError || "Informe um RE válido para a permuta.");
                     }
                     const requestDate = formData.get("requestDate") as string;
+                    const coverageDate = formData.get("coverageDate") as string;
                     const today = getTodayISO();
                     if (requestDate < today) {
                       throw new Error("A data não pode ser no passado.");
@@ -179,21 +141,27 @@ export function EmployeeRequestForm({
 
                     const reason = formData.get("reason") as string;
                     if (requestType === "swap" && reason.trim().length < 8) {
-                      throw new Error("O motivo deve ter pelo menos 8 caracteres.");
+                      throw new Error("Informe uma justificativa com pelo menos 8 caracteres.");
+                    }
+                    if (requestType === "swap" && coverageDate < today) {
+                      throw new Error("A data de pagamento não pode ser no passado.");
+                    }
+                    if (requestType === "swap" && requestDate === coverageDate) {
+                      throw new Error("As duas datas da permuta não podem ser iguais.");
                     }
                     const payload =
                       requestType === "swap"
                         ? {
                             requestType,
                             substituteEmployeeId: colleague?.id,
-                            requestDate: formData.get("requestDate"),
-                            coverageDate: formData.get("coverageDate"),
-                            reason: formData.get("reason"),
+                            requestDate,
+                            coverageDate,
+                            reason,
                           }
                         : {
                             requestType,
                             workplaceId: formData.get("workplaceId"),
-                            requestDate: formData.get("requestDate"),
+                            requestDate,
                             shiftId: formData.get("shiftId"),
                             turn: selectedShift?.turn || "indefinido",
                           };
@@ -204,7 +172,7 @@ export function EmployeeRequestForm({
                     });
 
                     setSuccess(config.success);
-                    (event.currentTarget as HTMLFormElement).reset();
+                    form.reset();
                     setColleagueRe("");
                     setColleague(null);
                     setSelectedShiftId("");
@@ -234,7 +202,7 @@ export function EmployeeRequestForm({
                       setColleague(null);
                       setResolveError("");
                     }}
-                    placeholder="Digite a matrícula (123-4567 ou 4567)"
+                    placeholder="Digite a Matrícula/RE do colega"
                     inputMode="numeric"
                     required
                   />
@@ -316,6 +284,7 @@ export function EmployeeRequestForm({
                   id="reason"
                   name="reason"
                   required
+                  minLength={8}
                   placeholder="Explique o motivo da permuta para a operação."
                 />
               </div>

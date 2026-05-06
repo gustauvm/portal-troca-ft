@@ -20,20 +20,38 @@ const swapSchema = z.object({
   requestType: z.literal("swap"),
   substituteEmployeeId: z.string().uuid(),
   workplaceId: z.string().uuid().optional().nullable(),
-  requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  coverageDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  reason: z.string().trim().min(8).max(500),
+  requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
+  coverageDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
+  reason: z.string().trim().min(8, "Informe uma justificativa com pelo menos 8 caracteres.").max(500),
 });
 
 const ftSchema = z.object({
   requestType: z.literal("ft"),
   workplaceId: z.string().uuid(),
-  requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida."),
   shiftId: z.string().uuid(),
   turn: z.enum(["diurno", "noturno", "indefinido"]).optional(),
 });
 
 export const requestPayloadSchema = z.discriminatedUnion("requestType", [swapSchema, ftSchema]);
+
+const cancelPayloadSchema = z.object({
+  reason: z.string().trim().min(8, "Informe o motivo do cancelamento com pelo menos 8 caracteres.").max(500),
+});
+
+function friendlyZodIssue(error: z.ZodError) {
+  const firstIssue = error.issues[0];
+  if (!firstIssue) return "Verifique os dados informados.";
+
+  const field = String(firstIssue.path[0] || "");
+  if (field === "reason") return "Informe uma justificativa com pelo menos 8 caracteres.";
+  if (field === "requestDate") return "Informe a data principal da solicitação.";
+  if (field === "coverageDate") return "Informe a data de pagamento da permuta.";
+  if (field === "substituteEmployeeId") return "Informe um colega válido para a permuta.";
+  if (field === "workplaceId") return "Selecione uma unidade válida.";
+  if (field === "shiftId") return "Selecione um horário válido.";
+  return firstIssue.message || "Verifique os dados informados.";
+}
 
 type PortalRequestRow = {
   id: string;
@@ -46,6 +64,8 @@ type PortalRequestRow = {
   payroll_reference: string;
   payroll_period_start: string;
   payroll_period_end: string;
+  requester_employee_id: string;
+  substitute_employee_id: string | null;
   requester_name: string;
   requester_enrolment: string;
   substitute_name: string | null;
@@ -59,6 +79,7 @@ type PortalRequestRow = {
   rejected_at: string | null;
   cancelled_at: string | null;
   launched_at: string | null;
+  cancel_reason: string | null;
   assigned_operator_name: string | null;
   operation_note: string | null;
   manual_authorization_note: string | null;
@@ -104,6 +125,7 @@ function mapRequest(row: PortalRequestRow) {
     rejectedAt: row.rejected_at,
     cancelledAt: row.cancelled_at,
     launchedAt: row.launched_at,
+    cancelReason: row.cancel_reason,
     assignedOperatorName: row.assigned_operator_name,
     operationNote: row.operation_note,
     manualAuthorizationNote: row.manual_authorization_note,
@@ -115,10 +137,18 @@ function mapRequest(row: PortalRequestRow) {
   };
 }
 
-function mapPortalEmployeeHistory(row: PortalRequestRow): EmployeeHistoryItem {
+function mapPortalEmployeeHistory(row: PortalRequestRow, employeeId: string): EmployeeHistoryItem {
+  const viewerRole =
+    row.requester_employee_id === employeeId
+      ? "requester"
+      : row.substitute_employee_id === employeeId
+        ? "substitute"
+        : "unknown";
+
   return {
     id: row.id,
     source: "portal",
+    viewerRole,
     requestType: row.request_type,
     workflowStatus: row.workflow_status,
     launchStatus: row.launch_status,
@@ -138,17 +168,27 @@ function mapPortalEmployeeHistory(row: PortalRequestRow): EmployeeHistoryItem {
     reason: row.request_type === "ft" ? "FT solicitada pelo colaborador." : row.reason,
     createdAt: row.created_at,
     launchedAt: row.launched_at,
+    cancelReason: row.cancel_reason,
     ftReasonLabel: row.ft_reason_label,
     selectedShiftName: row.selected_shift_name,
     selectedShiftTurn: row.selected_shift_turn,
-    canCancel: row.workflow_status === "submitted" && row.launch_status !== "matched",
+    canCancel:
+      viewerRole === "requester" &&
+      (row.workflow_status === "submitted" || row.workflow_status === "approved") &&
+      row.launch_status !== "matched",
   };
 }
 
-function mapNextiEmployeeHistory(row: NextiLaunchHistoryRow): EmployeeHistoryItem {
+function mapNextiEmployeeHistory(row: NextiLaunchHistoryRow, employeeId: string): EmployeeHistoryItem {
   return {
     id: row.id,
     source: "nexti",
+    viewerRole:
+      row.requester_employee_id === employeeId
+        ? "requester"
+        : row.substitute_employee_id === employeeId
+          ? "substitute"
+          : "unknown",
     requestType: row.request_type,
     workflowStatus: "approved",
     launchStatus: "matched",
@@ -168,6 +208,7 @@ function mapNextiEmployeeHistory(row: NextiLaunchHistoryRow): EmployeeHistoryIte
     reason: row.request_type === "swap" ? "Permuta (Troca de Folga) já lançada na Nexti." : "FT já lançada na Nexti.",
     createdAt: row.nexti_created_at || row.created_at,
     launchedAt: row.nexti_last_update || row.created_at,
+    cancelReason: null,
     ftReasonLabel: row.request_type === "ft" ? "Histórico Nexti" : null,
     selectedShiftName: row.shift_name,
     selectedShiftTurn: null,
@@ -302,11 +343,33 @@ function assertLocalFtSchedule(input: {
   }
 }
 
+function todayIsoDate(timeZone = "America/Sao_Paulo") {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const lookup = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${lookup.year}-${lookup.month}-${lookup.day}`;
+}
+
+function assertDateIsNotPast(date: string, label: string) {
+  if (date < todayIsoDate()) {
+    throw new Error(`${label} já passou. Escolha uma data de hoje em diante.`);
+  }
+}
+
 export async function createPortalRequest(
   session: EmployeeSession,
   rawPayload: unknown,
 ) {
-  const payload = requestPayloadSchema.parse(rawPayload);
+  const parsed = requestPayloadSchema.safeParse(rawPayload);
+  if (!parsed.success) {
+    throw new Error(friendlyZodIssue(parsed.error));
+  }
+
+  const payload = parsed.data;
   const requester = await getEmployeeById(session.employeeId);
 
   if (!requester || !requester.isActive) {
@@ -315,6 +378,15 @@ export async function createPortalRequest(
 
   const currentPayroll = getCurrentPayrollWindow();
   const requestPayroll = getPayrollWindowForDate(payload.requestDate);
+
+  assertDateIsNotPast(
+    payload.requestDate,
+    payload.requestType === "swap" ? "A data em que você vai trabalhar" : "A data da FT",
+  );
+
+  if (payload.requestType === "swap") {
+    assertDateIsNotPast(payload.coverageDate, "A data em que você vai folgar");
+  }
 
   if (requestPayroll.reference !== currentPayroll.reference) {
     throw new Error("A solicitação deve estar dentro da folha atual.");
@@ -557,11 +629,17 @@ export async function listEmployeeHistory(
     .select("*")
     .or(`requester_employee_id.eq.${session.employeeId},substitute_employee_id.eq.${session.employeeId}`);
 
+  const historyLookupFilters = [
+    `requester_employee_id.eq.${session.employeeId}`,
+    `substitute_employee_id.eq.${session.employeeId}`,
+    `requester_nexti_person_id.eq.${employee.nextiPersonId}`,
+    employee.personExternalId ? `requester_person_external_id.eq.${employee.personExternalId}` : null,
+  ].filter(Boolean);
+
   let nextiQuery = admin
     .from("nexti_launch_history")
     .select("*")
-    .eq("requester_employee_id", session.employeeId)
-    .eq("requester_is_active", true);
+    .or(historyLookupFilters.join(","));
 
   if (payrollReference) {
     portalQuery = portalQuery.eq("payroll_reference", payrollReference);
@@ -587,8 +665,10 @@ export async function listEmployeeHistory(
   }
 
   return [
-    ...((portalResult.data || []) as PortalRequestRow[]).map(mapPortalEmployeeHistory),
-    ...((nextiResult.data || []) as NextiLaunchHistoryRow[]).map(mapNextiEmployeeHistory),
+    ...((portalResult.data || []) as PortalRequestRow[]).map((row) => mapPortalEmployeeHistory(row, session.employeeId)),
+    ...((nextiResult.data || []) as NextiLaunchHistoryRow[]).map((row) =>
+      mapNextiEmployeeHistory(row, session.employeeId),
+    ),
   ].sort((left, right) => {
     const leftTime = new Date(left.createdAt || left.requestDate).getTime();
     const rightTime = new Date(right.createdAt || right.requestDate).getTime();
@@ -596,7 +676,12 @@ export async function listEmployeeHistory(
   });
 }
 
-export async function cancelPortalRequest(session: EmployeeSession, requestId: string) {
+export async function cancelPortalRequest(session: EmployeeSession, requestId: string, rawPayload: unknown) {
+  const parsed = cancelPayloadSchema.safeParse(rawPayload);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message || "Informe o motivo do cancelamento.");
+  }
+
   const admin = createSupabaseAdminClient();
   const { data: row } = await admin
     .from("portal_requests")
@@ -609,16 +694,22 @@ export async function cancelPortalRequest(session: EmployeeSession, requestId: s
     throw new Error("Solicitação não encontrada.");
   }
 
-  if (row.workflow_status !== "submitted") {
-    throw new Error("Essa solicitação só pode ser cancelada enquanto estiver pendente.");
+  if (row.launch_status === "matched") {
+    throw new Error("Essa solicitação já foi lançada e não pode ser cancelada pelo portal.");
+  }
+
+  if (row.workflow_status === "cancelled" || row.workflow_status === "rejected") {
+    throw new Error("Essa solicitação não está mais aberta para cancelamento.");
   }
 
   const { data, error } = await admin
     .from("portal_requests")
     .update({
       workflow_status: "cancelled",
+      operational_status: "cancelled",
       cancelled_at: new Date().toISOString(),
       cancelled_by_employee_id: session.employeeId,
+      cancel_reason: parsed.data.reason,
     })
     .eq("id", requestId)
     .select("*")
@@ -634,6 +725,9 @@ export async function cancelPortalRequest(session: EmployeeSession, requestId: s
     actorId: session.employeeId,
     actorLabel: session.fullName,
     eventType: "cancelled",
+    payload: {
+      reason: parsed.data.reason,
+    },
   });
 
   return mapRequest(data as PortalRequestRow);
@@ -1073,6 +1167,7 @@ export async function updatePortalRequestOperationStatus(
       workflow_status: "cancelled",
       operational_status: "cancelled",
       cancelled_at: now,
+      cancel_reason: payload.note,
       operation_note: payload.note,
       assigned_operator_user_id: operator.userId,
       assigned_operator_name: operator.fullName,

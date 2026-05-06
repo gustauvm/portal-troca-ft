@@ -86,6 +86,7 @@ export type PortalRequestRecord = {
   rejectedAt: string | null;
   cancelledAt: string | null;
   launchedAt: string | null;
+  cancelReason: string | null;
   assignedOperatorName: string | null;
   launchSource: LaunchSource;
   operationalStatus: OperationalStatus;
@@ -101,6 +102,7 @@ export type PortalRequestRecord = {
 export type EmployeeHistoryItem = {
   id: string;
   source: "portal" | "nexti";
+  viewerRole: "requester" | "substitute" | "unknown";
   requestType: RequestType;
   workflowStatus: WorkflowStatus;
   launchStatus: LaunchStatus;
@@ -120,6 +122,7 @@ export type EmployeeHistoryItem = {
   reason: string;
   createdAt: string;
   launchedAt: string | null;
+  cancelReason: string | null;
   ftReasonLabel: string | null;
   selectedShiftName: string | null;
   selectedShiftTurn: ShiftTurn | null;

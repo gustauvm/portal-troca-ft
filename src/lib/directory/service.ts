@@ -77,6 +77,35 @@ type ShiftRow = {
   is_active: boolean;
 };
 
+function normalizePlainText(value: string | null | undefined) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function formatHour(hour: string, minutes: string) {
+  return `${String(Number(hour)).padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+}
+
+function formatShiftDisplayName(name: string) {
+  const normalized = normalizePlainText(name);
+  const colonTimes = Array.from(normalized.matchAll(/\b(\d{1,2})[:H](\d{2})\b/g)).map((match) =>
+    formatHour(match[1], match[2]),
+  );
+  const compactTimes = Array.from(normalized.matchAll(/\b([0-2]?\d)([0-5]\d)\b/g)).map((match) =>
+    formatHour(match[1], match[2]),
+  );
+  const times = Array.from(new Set([...colonTimes, ...compactTimes]));
+
+  if (times.length >= 2) {
+    return `${times[0]} ÀS ${times[1]}`;
+  }
+
+  return String(name || "Horário").trim();
+}
+
 function mapEmployee(row: EmployeeRow) {
   return {
     id: row.id,
@@ -143,7 +172,7 @@ function mapShift(row: ShiftRow) {
     id: row.id,
     nextiShiftId: row.nexti_shift_id,
     shiftExternalId: row.shift_external_id,
-    name: row.name,
+    name: formatShiftDisplayName(row.name),
     turn: row.turn,
     isPreAssigned: row.is_pre_assigned,
     isActive: row.is_active,
@@ -151,11 +180,7 @@ function mapShift(row: ShiftRow) {
 }
 
 function isOperationalWorkplaceName(name: string | null | undefined) {
-  const normalized = String(name || "")
-    .trim()
-    .toUpperCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+  const normalized = normalizePlainText(name);
   const blocked = ["INSS", "PROCESSO", "RESCISAO", "RESERVA", "AFAST", "ADMINISTRATIVO", "ADM"];
   return Boolean(normalized) && !blocked.some((pattern) => normalized.includes(pattern));
 }
@@ -478,14 +503,13 @@ export async function listValidShifts() {
   }
 
   const allShifts = ((data || []) as ShiftRow[]).map(mapShift);
-  
-  // Deduplicate by nextiShiftId, keeping first occurrence
-  const seen = new Set<number>();
+  const seen = new Set<string>();
   const deduped = allShifts.filter((shift) => {
-    if (seen.has(shift.nextiShiftId)) {
+    const key = `${normalizePlainText(shift.name)}:${shift.turn}`;
+    if (seen.has(key)) {
       return false;
     }
-    seen.add(shift.nextiShiftId);
+    seen.add(key);
     return true;
   });
 

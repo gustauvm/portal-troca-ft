@@ -156,13 +156,7 @@ site_url = "https://portal-troca-ft.vercel.app"
 additional_redirect_urls = [
   "https://portal-troca-ft.vercel.app",
   "https://portal-troca-ft.vercel.app/operacao/auth/callback",
-  "https://portal-troca-ft.vercel.app/operacao/nova-senha",
-  "http://localhost:3000",
-  "http://localhost:3000/operacao/auth/callback",
-  "http://localhost:3000/operacao/nova-senha",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:3000/operacao/auth/callback",
-  "http://127.0.0.1:3000/operacao/nova-senha"
+  "https://portal-troca-ft.vercel.app/operacao/nova-senha"
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600

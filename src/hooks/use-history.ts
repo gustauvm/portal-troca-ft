@@ -11,5 +11,6 @@ export function useHistory(payrollReference: string, requestType: "all" | "swap"
       fetchJson<HistoryResponse>(
         `/api/history?payrollReference=${encodeURIComponent(payrollReference)}&requestType=${requestType}`,
       ),
+    staleTime: 60_000,
   });
 }
