@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchJson } from "@/lib/utils/fetcher";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export function EmployeeSignOutButton() {
   const router = useRouter();
@@ -35,8 +34,7 @@ export function OperatorSignOutButton() {
       size="sm"
       className="shrink-0"
       onClick={async () => {
-        const supabase = createSupabaseBrowserClient();
-        await supabase.auth.signOut();
+        await fetchJson("/api/ops/auth/session/clear", { method: "POST" });
         router.push("/operacao/entrar");
         router.refresh();
       }}

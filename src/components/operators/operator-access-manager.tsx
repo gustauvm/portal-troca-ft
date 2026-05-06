@@ -50,8 +50,7 @@ export function OperatorAccessManager({
       await fetchJson("/api/ops/admin/operators", {
         method: "POST",
         body: JSON.stringify({
-          email: formData.get("email"),
-          fullName: formData.get("fullName"),
+          enrolment: formData.get("enrolment"),
           role,
           canViewAll,
           canEditAll,
@@ -62,7 +61,7 @@ export function OperatorAccessManager({
         }),
       });
       await refreshItems();
-      setMessage("Acesso salvo. O e-mail já pode criar ou recuperar senha.");
+      setMessage("Acesso salvo. A matrícula já pode entrar com CPF.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar o acesso.");
     } finally {
@@ -70,13 +69,13 @@ export function OperatorAccessManager({
     }
   }
 
-  async function revoke(email: string) {
+  async function revoke(id: string) {
     setPending(true);
     setError("");
     setMessage("");
 
     try {
-      await fetchJson(`/api/ops/admin/operators?email=${encodeURIComponent(email)}`, { method: "DELETE" });
+      await fetchJson(`/api/ops/admin/operators?id=${encodeURIComponent(id)}`, { method: "DELETE" });
       await refreshItems();
       setMessage("Acesso removido.");
     } catch (revokeError) {
@@ -92,7 +91,7 @@ export function OperatorAccessManager({
         <CardHeader>
           <CardTitle>Adicionar ou alterar acesso</CardTitle>
           <CardDescription>
-            Por padrão, operadores podem ver e alterar tudo. Desmarque para limitar por grupo ou empresa.
+            Informe a matrícula/RE do colaborador. Por padrão, operadores podem ver e alterar tudo.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -105,12 +104,8 @@ export function OperatorAccessManager({
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" name="email" type="email" required />
-              </div>
-              <div>
-                <Label htmlFor="fullName">Nome</Label>
-                <Input id="fullName" name="fullName" placeholder="Opcional" />
+                <Label htmlFor="enrolment">Matrícula/RE</Label>
+                <Input id="enrolment" name="enrolment" placeholder="Digite a Matrícula/RE" required />
               </div>
             </div>
 
@@ -227,15 +222,18 @@ export function OperatorAccessManager({
         </CardHeader>
         <CardContent className="grid gap-3">
           {items.map((item) => (
-            <div key={item.email} className="grid gap-3 rounded-3xl bg-white/76 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div key={item.id} className="grid gap-3 rounded-3xl bg-white/76 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
               <div>
-                <p className="font-semibold text-[color:var(--ink-950)]">{item.email}</p>
+                <p className="font-semibold text-[color:var(--ink-950)]">
+                  {item.employeeName || item.fullName || "Operador"}
+                </p>
                 <p className="text-sm text-[color:var(--ink-600)]">
-                  {item.role} • {item.status} • {item.canViewAll ? "visualiza tudo" : "visualização limitada"} •{" "}
+                  RE {item.employeeEnrolment || "não vinculado"} • {item.role} • {item.status} •{" "}
+                  {item.canViewAll ? "visualiza tudo" : "visualização limitada"} •{" "}
                   {item.canEditAll ? "altera tudo" : "alteração limitada"}
                 </p>
               </div>
-              <Button variant="danger" size="sm" onClick={() => revoke(item.email)} disabled={pending || item.status === "revoked"}>
+              <Button variant="danger" size="sm" onClick={() => revoke(item.id)} disabled={pending || item.status === "revoked"}>
                 Remover
               </Button>
             </div>

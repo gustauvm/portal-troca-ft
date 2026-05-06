@@ -9,8 +9,7 @@ import {
 } from "@/lib/auth/operator-access";
 
 const operatorSchema = z.object({
-  email: z.string().trim().email(),
-  fullName: z.string().trim().optional(),
+  enrolment: z.string().trim().min(1, "Informe a matrícula/RE."),
   role: z.enum(["operator", "admin"]).default("operator"),
   canViewAll: z.boolean().default(true),
   canEditAll: z.boolean().default(true),
@@ -47,7 +46,6 @@ export async function POST(request: Request) {
     const payload = operatorSchema.parse(await request.json());
     const item = await upsertOperatorAccess({
       ...payload,
-      fullName: payload.fullName || null,
       actorUserId: operator.userId,
     });
 
@@ -68,9 +66,9 @@ export async function DELETE(request: Request) {
   try {
     assertOperatorIsAdmin(operator);
     const { searchParams } = new URL(request.url);
-    const email = searchParams.get("email") || "";
+    const id = searchParams.get("id") || "";
     const item = await revokeOperatorAccess({
-      email,
+      id,
       actorUserId: operator.userId,
     });
 

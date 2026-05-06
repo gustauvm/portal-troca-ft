@@ -176,6 +176,10 @@ export type ShiftDirectoryRecord = {
 export type OperatorAccessRecord = {
   id: string;
   email: string;
+  employeeId: string | null;
+  employeeEnrolment: string | null;
+  employeeName: string | null;
+  nextiPersonId: number | null;
   fullName: string | null;
   role: OperatorRole;
   status: "active" | "revoked";

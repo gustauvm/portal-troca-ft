@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+import { findEmployeeByEnrolment, getEmployeeForLoginFresh } from "@/lib/directory/service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/database.types";
 import type { OperatorAccessRecord, OperatorRole } from "@/lib/types";
@@ -9,6 +11,8 @@ type OperatorAccessRow = Database["public"]["Tables"]["operator_access"]["Row"];
 export type OperatorSession = {
   userId: string;
   accessId: string;
+  employeeId: string;
+  enrolment: string;
   fullName: string;
   email: string;
   role: OperatorRole;
@@ -20,14 +24,18 @@ export type OperatorSession = {
   editCompanyIds: number[];
 };
 
-export function normalizeOperatorEmail(email: string) {
-  return String(email || "").trim().toLowerCase();
+function buildSyntheticOperatorEmail(employeeId: string) {
+  return `operator+${employeeId}@portal.local`;
 }
 
 function mapAccess(row: OperatorAccessRow): OperatorAccessRecord {
   return {
     id: row.id,
     email: row.email,
+    employeeId: row.employee_id,
+    employeeEnrolment: row.employee_enrolment,
+    employeeName: row.employee_name,
+    nextiPersonId: row.nexti_person_id,
     fullName: row.full_name,
     role: row.role,
     status: row.status,
@@ -40,15 +48,74 @@ function mapAccess(row: OperatorAccessRow): OperatorAccessRecord {
   };
 }
 
-export async function getActiveOperatorAccessByEmail(email: string) {
-  const admin = createSupabaseAdminClient();
-  const normalizedEmail = normalizeOperatorEmail(email);
-  if (!normalizedEmail) return null;
+function mapOperatorSession(access: OperatorAccessRow, authUserId: string): OperatorSession {
+  if (!access.employee_id) {
+    throw new Error("Acesso operacional sem colaborador vinculado.");
+  }
 
+  return {
+    userId: authUserId,
+    accessId: access.id,
+    employeeId: access.employee_id,
+    enrolment: access.employee_enrolment || "",
+    fullName: access.full_name || access.employee_name || "Operação",
+    email: access.email,
+    role: access.role,
+    canViewAll: access.can_view_all,
+    canEditAll: access.can_edit_all,
+    viewGroupKeys: access.view_group_keys || [],
+    editGroupKeys: access.edit_group_keys || [],
+    viewCompanyIds: access.view_company_ids || [],
+    editCompanyIds: access.edit_company_ids || [],
+  };
+}
+
+export async function ensureOperatorTechnicalAuthUser(access: OperatorAccessRow) {
+  if (access.auth_user_id) return access.auth_user_id;
+  if (!access.employee_id) {
+    throw new Error("Acesso operacional sem colaborador vinculado.");
+  }
+
+  const admin = createSupabaseAdminClient();
+  const email = access.email || buildSyntheticOperatorEmail(access.employee_id);
+  const existingUser = await findAuthUserByEmail(email);
+  const userId =
+    existingUser?.id ||
+    (
+      await admin.auth.admin.createUser({
+        email,
+        password: randomUUID() + randomUUID(),
+        email_confirm: true,
+        user_metadata: {
+          role: access.role,
+          access_id: access.id,
+          employee_id: access.employee_id,
+        },
+      })
+    ).data.user?.id;
+
+  if (!userId) {
+    throw new Error("Não foi possível preparar o acesso operacional.");
+  }
+
+  const { error } = await admin
+    .from("operator_access")
+    .update({ auth_user_id: userId })
+    .eq("id", access.id);
+  if (error) {
+    throw new Error("Não foi possível vincular o acesso operacional.");
+  }
+
+  await syncOperatorProfileForAccess(access, userId);
+  return userId;
+}
+
+export async function getActiveOperatorAccessByEmployeeId(employeeId: string) {
+  const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from("operator_access")
     .select("*")
-    .eq("email", normalizedEmail)
+    .eq("employee_id", employeeId)
     .eq("status", "active")
     .maybeSingle();
 
@@ -56,38 +123,41 @@ export async function getActiveOperatorAccessByEmail(email: string) {
     throw new Error("Falha ao validar acesso operacional.");
   }
 
-  return data ? mapAccess(data as OperatorAccessRow) : null;
+  return data as OperatorAccessRow | null;
 }
 
-export async function syncOperatorProfileForUser(input: {
-  userId: string;
-  email: string;
-}) {
-  const access = await getActiveOperatorAccessByEmail(input.email);
+export async function getActiveOperatorAccessById(accessId: string) {
   const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("operator_access")
+    .select("*")
+    .eq("id", accessId)
+    .eq("status", "active")
+    .maybeSingle();
 
-  if (!access) {
-    await admin
-      .from("operator_profiles")
-      .update({ status: "revoked" })
-      .eq("user_id", input.userId);
-    return null;
+  if (error) {
+    throw new Error("Falha ao validar acesso operacional.");
   }
 
+  return data as OperatorAccessRow | null;
+}
+
+export async function syncOperatorProfileForAccess(access: OperatorAccessRow, authUserId: string) {
+  const admin = createSupabaseAdminClient();
   const { error } = await admin.from("operator_profiles").upsert(
     {
-      user_id: input.userId,
+      user_id: authUserId,
       access_id: access.id,
       email: access.email,
-      full_name: access.fullName || access.email,
+      full_name: access.full_name || access.employee_name || access.employee_enrolment || "Operação",
       role: access.role,
       status: access.status,
-      can_view_all: access.canViewAll,
-      can_edit_all: access.canEditAll,
-      view_group_keys: access.viewGroupKeys,
-      edit_group_keys: access.editGroupKeys,
-      view_company_ids: access.viewCompanyIds,
-      edit_company_ids: access.editCompanyIds,
+      can_view_all: access.can_view_all,
+      can_edit_all: access.can_edit_all,
+      view_group_keys: access.view_group_keys || [],
+      edit_group_keys: access.edit_group_keys || [],
+      view_company_ids: access.view_company_ids || [],
+      edit_company_ids: access.edit_company_ids || [],
     },
     { onConflict: "user_id", ignoreDuplicates: false },
   );
@@ -95,20 +165,29 @@ export async function syncOperatorProfileForUser(input: {
   if (error) {
     throw new Error("Falha ao sincronizar perfil operacional.");
   }
+}
 
-  return {
-    userId: input.userId,
-    accessId: access.id,
-    fullName: access.fullName || access.email,
-    email: access.email,
-    role: access.role,
-    canViewAll: access.canViewAll,
-    canEditAll: access.canEditAll,
-    viewGroupKeys: access.viewGroupKeys,
-    editGroupKeys: access.editGroupKeys,
-    viewCompanyIds: access.viewCompanyIds,
-    editCompanyIds: access.editCompanyIds,
-  } satisfies OperatorSession;
+export async function createOperatorSessionFromEmployeeLogin(input: { enrolment: string; cpf: string }) {
+  const employee = await getEmployeeForLoginFresh(input.enrolment, input.cpf);
+  if (!employee) {
+    throw new Error("Colaborador não encontrado com a matrícula e CPF informados.");
+  }
+
+  const access = await getActiveOperatorAccessByEmployeeId(employee.id);
+  if (!access) {
+    throw new Error("Esta matrícula não está liberada para acesso operacional.");
+  }
+
+  const authUserId = await ensureOperatorTechnicalAuthUser(access);
+  return mapOperatorSession(access, authUserId);
+}
+
+export async function getOperatorSessionByAccessId(accessId: string) {
+  const access = await getActiveOperatorAccessById(accessId);
+  if (!access) return null;
+  const authUserId = await ensureOperatorTechnicalAuthUser(access);
+  await syncOperatorProfileForAccess(access, authUserId);
+  return mapOperatorSession(access, authUserId);
 }
 
 export function operatorCanViewScope(
@@ -155,8 +234,9 @@ export async function listOperatorAccess() {
   const { data, error } = await admin
     .from("operator_access")
     .select("*")
+    .not("employee_id", "is", null)
     .order("status")
-    .order("email");
+    .order("employee_name");
 
   if (error) {
     throw new Error("Não foi possível listar acessos operacionais.");
@@ -166,8 +246,7 @@ export async function listOperatorAccess() {
 }
 
 export async function upsertOperatorAccess(input: {
-  email: string;
-  fullName?: string | null;
+  enrolment: string;
   role: OperatorRole;
   canViewAll: boolean;
   canEditAll: boolean;
@@ -177,16 +256,23 @@ export async function upsertOperatorAccess(input: {
   editCompanyIds: number[];
   actorUserId: string;
 }) {
-  const admin = createSupabaseAdminClient();
-  const email = normalizeOperatorEmail(input.email);
-  if (!email) throw new Error("Informe um e-mail válido.");
+  const employee = await findEmployeeByEnrolment(input.enrolment, { activeOnly: true });
+  if (!employee) {
+    throw new Error("Matrícula não encontrada ou colaborador inativo.");
+  }
 
+  const admin = createSupabaseAdminClient();
+  const email = buildSyntheticOperatorEmail(employee.id);
   const { data, error } = await admin
     .from("operator_access")
     .upsert(
       {
         email,
-        full_name: input.fullName || email,
+        employee_id: employee.id,
+        employee_enrolment: employee.enrolment,
+        employee_name: employee.fullName,
+        nexti_person_id: employee.nextiPersonId,
+        full_name: employee.fullName,
         role: input.role,
         status: "active",
         can_view_all: input.role === "admin" ? true : input.canViewAll,
@@ -199,7 +285,7 @@ export async function upsertOperatorAccess(input: {
         revoked_by: null,
         revoked_at: null,
       },
-      { onConflict: "email", ignoreDuplicates: false },
+      { onConflict: "employee_id", ignoreDuplicates: false },
     )
     .select("*")
     .single();
@@ -208,15 +294,15 @@ export async function upsertOperatorAccess(input: {
     throw new Error(error?.message || "Não foi possível salvar o acesso operacional.");
   }
 
+  await ensureOperatorTechnicalAuthUser(data as OperatorAccessRow);
   return mapAccess(data as OperatorAccessRow);
 }
 
 export async function revokeOperatorAccess(input: {
-  email: string;
+  id: string;
   actorUserId: string;
 }) {
   const admin = createSupabaseAdminClient();
-  const email = normalizeOperatorEmail(input.email);
   const now = new Date().toISOString();
   const { data, error } = await admin
     .from("operator_access")
@@ -231,7 +317,7 @@ export async function revokeOperatorAccess(input: {
       view_company_ids: [],
       edit_company_ids: [],
     })
-    .eq("email", email)
+    .eq("id", input.id)
     .select("*")
     .single();
 
@@ -242,116 +328,28 @@ export async function revokeOperatorAccess(input: {
   await admin
     .from("operator_profiles")
     .update({ status: "revoked", can_view_all: false, can_edit_all: false })
-    .eq("email", email);
+    .eq("access_id", input.id);
 
   return mapAccess(data as OperatorAccessRow);
 }
 
 export async function findAuthUserByEmail(email: string) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
   const admin = createSupabaseAdminClient();
   for (let page = 1; page <= 10; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw new Error("Falha ao consultar usuários do Supabase Auth.");
-    const found = data.users.find((user) => normalizeOperatorEmail(user.email || "") === email);
+    const found = data.users.find((user) => String(user.email || "").trim().toLowerCase() === normalizedEmail);
     if (found) return found;
     if (data.users.length < 1000) break;
   }
   return null;
 }
 
-export async function createOperatorFirstAccess(input: {
-  email: string;
-  password: string;
-  confirmation: string;
-}) {
-  const email = normalizeOperatorEmail(input.email);
-  if (input.password.length < 8) {
-    throw new Error("A senha precisa ter pelo menos 8 caracteres.");
-  }
-  if (input.password !== input.confirmation) {
-    throw new Error("As senhas não conferem.");
-  }
-
-  const access = await getActiveOperatorAccessByEmail(email);
-  if (!access) {
-    throw new Error("Este e-mail não está liberado para acesso operacional.");
-  }
-
-  const existingUser = await findAuthUserByEmail(email);
-  if (existingUser) {
-    await syncOperatorProfileForUser({ userId: existingUser.id, email });
-    throw new Error("Este e-mail já tem conta. Use Entrar ou Trocar senha.");
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.auth.admin.createUser({
-    email,
-    password: input.password,
-    email_confirm: true,
-    user_metadata: {
-      role: access.role,
-      access_id: access.id,
-    },
-  });
-
-  if (error || !data.user) {
-    throw new Error(error?.message || "Não foi possível criar a conta operacional.");
-  }
-
-  await syncOperatorProfileForUser({ userId: data.user.id, email });
-  return { ok: true, requiresConfirmation: false };
+export async function createOperatorFirstAccess() {
+  throw new Error("Primeiro acesso por e-mail foi desativado. Use matrícula e CPF.");
 }
 
-export async function resetOperatorPasswordDirect(input: {
-  email: string;
-  password: string;
-  confirmation: string;
-}) {
-  const email = normalizeOperatorEmail(input.email);
-  if (input.password.length < 8) {
-    throw new Error("A senha precisa ter pelo menos 8 caracteres.");
-  }
-  if (input.password !== input.confirmation) {
-    throw new Error("As senhas não conferem.");
-  }
-
-  const access = await getActiveOperatorAccessByEmail(email);
-  if (!access) {
-    throw new Error("Este e-mail não está liberado para acesso operacional.");
-  }
-
-  const authUser = await findAuthUserByEmail(email);
-  if (!authUser) {
-    throw new Error("Conta ainda não criada. Use Primeiro acesso para definir a senha inicial.");
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(authUser.id, {
-    password: input.password,
-    user_metadata: {
-      role: access.role,
-      access_id: access.id,
-    },
-  });
-  if (error) throw new Error(error.message || "Não foi possível atualizar a senha.");
-
-  await syncOperatorProfileForUser({ userId: authUser.id, email });
-  return { ok: true, mode: "direct_reset" as const };
-}
-
-export async function requestOperatorPasswordEmail(emailInput: string) {
-  const email = normalizeOperatorEmail(emailInput);
-  const access = await getActiveOperatorAccessByEmail(email);
-  if (!access) {
-    throw new Error("Este e-mail não está liberado para acesso operacional.");
-  }
-
-  const authUser = await findAuthUserByEmail(email);
-
-  if (!authUser) {
-    throw new Error("Conta ainda não criada. Use Primeiro acesso para definir a senha inicial.");
-  }
-
-  await syncOperatorProfileForUser({ userId: authUser.id, email });
-  return { ok: true, mode: "recovery_disabled" as const };
+export async function resetOperatorPasswordDirect() {
+  throw new Error("Troca de senha por e-mail foi desativada. Use matrícula e CPF.");
 }

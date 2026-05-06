@@ -49,6 +49,11 @@ export type Database = {
         Row: {
           id: string;
           email: string;
+          employee_id: string | null;
+          employee_enrolment: string | null;
+          employee_name: string | null;
+          nexti_person_id: number | null;
+          auth_user_id: string | null;
           full_name: string | null;
           role: "operator" | "admin";
           status: "active" | "revoked";
@@ -67,6 +72,11 @@ export type Database = {
         Insert: {
           id?: string;
           email: string;
+          employee_id?: string | null;
+          employee_enrolment?: string | null;
+          employee_name?: string | null;
+          nexti_person_id?: number | null;
+          auth_user_id?: string | null;
           full_name?: string | null;
           role?: "operator" | "admin";
           status?: "active" | "revoked";

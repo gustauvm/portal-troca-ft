@@ -753,6 +753,8 @@ type OperatorLaunchHistoryFilterInput = OperatorFilterInput & {
   includeInactive?: boolean;
 };
 
+const OPERATION_HISTORY_MIN_DATE = "2025-01-01";
+
 export async function listOperatorRequests(filters: OperatorFilterInput, operator?: OperatorSession) {
   const admin = createSupabaseAdminClient();
   const page = Math.max(1, Number(filters.page || 1));
@@ -822,6 +824,7 @@ export async function listOperatorLaunchHistory(filters: OperatorLaunchHistoryFi
   let query = admin
     .from("nexti_launch_history")
     .select("*", { count: "exact" })
+    .gte("request_date", OPERATION_HISTORY_MIN_DATE)
     .order("request_date", { ascending: false })
     .range(from, to);
 
